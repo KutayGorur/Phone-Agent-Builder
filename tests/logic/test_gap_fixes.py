@@ -111,5 +111,41 @@ class Smoke(unittest.TestCase):
             generate(json.load(open(f, encoding='utf-8')))
 
 
+class ToolContract(unittest.TestCase):
+    def _spec(self):
+        return json.load(open(os.path.join(ROOT, 'builder', 'specs', 'brief-a.spec.json'), encoding='utf-8'))
+
+    def test_gap04_shipped_specs_match(self):
+        import glob
+        from builder.generate.generate import generate, tool_contract_problems
+        for f in glob.glob(os.path.join(ROOT, 'builder', 'specs', '*.json')):
+            s = json.load(open(f, encoding='utf-8'))
+            self.assertEqual(tool_contract_problems(s, generate(s)), [], f)
+
+    def test_gap04_renamed_field_new_required_field_and_renamed_response_are_found(self):
+        from builder.generate.generate import generate, tool_contract_problems
+        s = self._spec()
+        wf = generate(s)                                   # built from the old contract
+        cp = s['tools']['create_promise']
+        cp['fields']['promise_date'] = cp['fields'].pop('date')
+        cp['fields']['channel'] = {'type': 'string', 'required': True}
+        cp['response_fields']['success'] = cp['response_fields'].pop('ok')
+        text = ' | '.join(tool_contract_problems(s, wf))
+        self.assertIn('request field date is not a field of create_promise', text)
+        self.assertIn('required field promise_date of create_promise is not sent', text)
+        self.assertIn('required field channel of create_promise is not sent', text)
+        self.assertIn('reads data.ok', text)
+
+    def test_gap04_value_outside_an_enum_and_changed_path(self):
+        from builder.generate.generate import generate, tool_contract_problems
+        s = self._spec()
+        wf = generate(s)
+        s['tools']['close_call']['path'] = '/finish'
+        add = s['tools']['add_note']['fields']['reason']
+        add['enum'] = ['only_this']
+        text = ' | '.join(tool_contract_problems(s, wf))
+        self.assertIn('does not end with the API path /finish', text)
+
+
 if __name__ == '__main__':
     unittest.main()

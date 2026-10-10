@@ -239,6 +239,19 @@ def main(argv=None):
                 status = "degraded"
                 t.error("compiler guessed a meaning, build will be labelled degraded: " + "; ".join(blocking))
 
+        tcp = getattr(gm, "tool_contract_problems", None)
+        if tcp is not None and isinstance(workflow, dict) and "nodes" in workflow and workflow is not stub_generate:
+            try:
+                cp = tcp(spec, workflow)
+            except Exception as e:  # noqa: BLE001
+                cp = []
+                t.note(f"tool contract check skipped: {e!r}")
+            if cp:
+                status = "degraded"
+                t.error("workflow does not match the supplied tool API, build will be labelled degraded: " + "; ".join(cp[:8]))
+            else:
+                t.note("tool contract check: every request field, path and response binding matches the supplied tool API")
+
         if a.dry_run:
             out_path = str(out_dir / f"{stem}.workflow.json")
             pathlib.Path(out_path).write_text(json.dumps({"workflow": workflow}, indent=1, ensure_ascii=False), encoding="utf-8")

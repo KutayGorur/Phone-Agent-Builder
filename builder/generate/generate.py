@@ -64,6 +64,83 @@ def engine_code(E):
     return check_code(lib.rstrip('\n') + '\n\n\n' + eng, 'engine')
 
 
+def _api_calls(x, out):
+    if isinstance(x, dict):
+        f = x.get('function')
+        if isinstance(f, dict) and f.get('handler') == '__function__:api_call':
+            out.append((f, x.get('_node')))
+        for v in x.values():
+            _api_calls(v, out)
+    elif isinstance(x, list):
+        for v in x:
+            _api_calls(v, out)
+    return out
+
+
+def tool_contract_problems(spec, wf):
+    """Compare what the workflow sends to (and reads from) the bank tools with the supplied tool API: unknown tools, other
+    paths, request fields the tool does not list, required fields that are not sent, values outside an enum, response
+    paths the tool does not return. Static check, no network. An empty list means the emitted contract matches."""
+    tools = spec.get('tools') or {}
+    tools = tools.get('tools') if isinstance(tools.get('tools'), dict) else tools
+    tools = {k: v for k, v in tools.items() if isinstance(v, dict) and 'fields' in v}
+    if not tools:
+        return []
+    probs = []
+    for name, nd in (wf.get('nodes') or {}).items():
+        calls = _api_calls(nd.get('pre_actions') or [], [])
+        calls += _api_calls(nd.get('tools') or [], [])
+        for f, _ in calls:
+            pr = (f.get('parameters') or {}).get('properties') or {}
+            url = (pr.get('url') or {}).get('default') or ''
+            tail = '/' + url.rstrip('/').rsplit('/', 1)[-1]       # identity hooks have their own function name, one URL
+            tool = next((k for k, v in tools.items() if v.get('path') == tail), f.get('name'))
+            t = tools.get(tool)
+            if t is None:
+                probs.append('node %s calls %s, which the tool API does not list' % (name, tool))
+                continue
+            if t.get('path') and not url.endswith(t['path']):
+                probs.append('node %s: url %s does not end with the API path %s' % (name, url, t['path']))
+            if (pr.get('method') or {}).get('default') and t.get('method') and pr['method']['default'].upper() != t['method'].upper():
+                probs.append('node %s: method %s, the API says %s' % (name, pr['method']['default'], t['method']))
+            body = ((pr.get('body') or {}).get('properties')) or {}
+            api_f = t.get('fields') or {}
+            for k, v in body.items():
+                if k not in api_f:
+                    probs.append('node %s: request field %s is not a field of %s' % (name, k, tool))
+                    continue
+                d = (v or {}).get('default')
+                en = api_f[k].get('enum')
+                if en and isinstance(d, str) and '{{' not in d and d not in en:
+                    probs.append('node %s: %s=%r is not one of %s' % (name, k, d, en))
+            for k, v in api_f.items():
+                if v.get('required') and k not in body:
+                    probs.append('node %s: required field %s of %s is not sent' % (name, k, tool))
+        resp = None
+        for m in nd.get('response_mapping') or []:
+            if resp is None and calls:
+                resp = (tools.get(calls[0][0].get('name')) or {}).get('response_fields') or {}
+            cur, ok = resp, True
+            for i, part in enumerate(re.sub(r'^data\.', '', str(m.get('path') or '')).split('.')):
+                if not isinstance(cur, dict) or part not in cur:
+                    ok = False
+                    break
+                cur = cur[part].get('fields') or cur[part].get('items') or {}
+            if resp is not None and not ok:
+                probs.append('node %s reads %s, which %s does not return' % (name, m.get('path'), calls[0][0].get('name')))
+    ga = (tools.get('get_account') or {}).get('response_fields') or {}
+    items = ((ga.get('products') or {}).get('items')) or None
+    if items:
+        try:
+            E, _ = build_E_warn(spec)
+            for k in (E.get('f_pd'), E.get('f_days')):
+                if k and k not in items:
+                    probs.append('the engine reads product field %s, which get_account does not return' % k)
+        except Exception as e:  # noqa: BLE001
+            probs.append('compiling the spec for the product field check failed: %r' % (e,))
+    return probs
+
+
 # ------------------------------------------------------------------ node helpers
 
 def cond(var, op, operand=None):
