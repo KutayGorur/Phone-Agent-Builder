@@ -1,6 +1,6 @@
 """One text-in, text-out model call for the parser, with the trace entry the event requires.
 
-Backends, tried in this order (standard library only, nothing to install):
+Backends, tried in this order (standard library only, nothing to install); a backend that fails hands the call to the next:
   1. Anthropic Messages API over HTTPS when ANTHROPIC_API_KEY is set.
   2. The `claude` CLI in print mode (uses the machine's Claude login), tools disabled.
 Every call is logged with `trace.model_call(model, purpose)`.
@@ -86,9 +86,20 @@ def complete(purpose, system, prompt, model=None, max_tokens=24000, timeout=420)
     if os.environ.get("PARSER_REPLAY_DIR"):
         return _replay(purpose, system, prompt)
     t0 = time.time()
-    backend = "api" if os.environ.get("ANTHROPIC_API_KEY") else "cli"
-    _log(model, purpose, backend=backend, prompt_chars=len(prompt))
-    text = _call_api(model, system, prompt, max_tokens, timeout) if backend == "api" else _call_cli(model, system, prompt, timeout)
+    order = (["api"] if os.environ.get("ANTHROPIC_API_KEY") else []) + (["cli"] if (shutil.which("claude") or shutil.which("claude.cmd")) else [])
+    order = order or ["cli"]                       # nothing available: the CLI call raises the clear "cannot call a model" error
+    text, err = None, None
+    for backend in order:                          # a failing backend (bad key, usage limit) falls back to the other one
+        _log(model, purpose, backend=backend, prompt_chars=len(prompt))
+        try:
+            text = _call_api(model, system, prompt, max_tokens, timeout) if backend == "api" else _call_cli(model, system, prompt, timeout)
+            break
+        except Exception as e:  # noqa: BLE001
+            err = e
+            if trace is not None:
+                trace.note(f"model call failed on backend {backend}: {str(e)[:300]}")
+    if text is None:
+        raise err
     if trace is not None:
         trace.note(f"model call done in {time.time() - t0:.0f}s: {purpose} ({len(text)} chars)")
     return text

@@ -98,6 +98,45 @@ def run_parse_subprocess(target, args, seconds, trace_path=None):
         except OSError: pass
 
 
+def bundle_stem(briefs, out_dir):
+    """Name of the output files and the Freya slot. One file: its stem. Several: all stems joined, so a bundle is told
+    apart from another that ends in a file of the same name. A rerun of the same bundle keeps its name (the slot is
+    updated in place); a different bundle that would take an existing name gets a short hash of its paths."""
+    import hashlib
+    stems = [pathlib.Path(b).stem for b in briefs]
+    stem = "-".join(stems) if len(stems) > 1 else stems[0]
+    stem = re.sub(r"[^\w.-]+", "_", stem)[:60]
+    src = chr(10).join(str(pathlib.Path(b).resolve()) for b in briefs)
+    side = pathlib.Path(out_dir) / f"{stem}.source.txt"
+    try:
+        if side.exists() and side.read_text(encoding="utf-8") != src:
+            stem = f"{stem[:50]}-{hashlib.sha1(src.encode('utf-8')).hexdigest()[:6]}"
+            side = pathlib.Path(out_dir) / f"{stem}.source.txt"
+        pathlib.Path(out_dir).mkdir(parents=True, exist_ok=True)
+        side.write_text(src, encoding="utf-8")
+    except OSError:
+        pass
+    return stem
+
+
+def save_with_recovery(freya, stem, workflow, state_file, t):
+    """freya.save_workflow; a slot whose workflow no longer exists (other workspace or key, deleted) is forgotten once
+    and created again. Any other error is raised."""
+    try:
+        return freya.save_workflow(stem, workflow, state_file=state_file)
+    except Exception as e:  # noqa: BLE001
+        if "-> 404" not in str(e):
+            raise
+        f = pathlib.Path(state_file)
+        state = json.loads(f.read_text()) if f.exists() else {}
+        if stem not in state:
+            raise
+        t.error(f"saved workflow for slot {stem} not found on the platform (404); creating it again")
+        state.pop(stem)
+        f.write_text(json.dumps(state, indent=1))
+        return freya.save_workflow(stem, workflow, state_file=state_file)
+
+
 def readiness_problems(spec):
     """Reasons a spec is not trustworthy: parser flags plus minimum content (identity questions, closing outcomes, calendar)."""
     probs, par = [], spec.get("parser") or {}
@@ -182,7 +221,7 @@ def main(argv=None):
     if len(a.files) < 2:
         ap.error("need at least one brief and the tool API file")
     briefs, tool_api = a.files[:-1], a.files[-1]
-    stem = pathlib.Path(briefs[-1]).stem
+    stem = bundle_stem(briefs, a.out_dir)
     t = tr.Trace(pathlib.Path(a.trace_dir) / f"{stem}-{time.strftime('%Y%m%d-%H%M%S')}.trace.txt")
     tr.set_current(t)
     t0 = time.time()
@@ -205,6 +244,19 @@ def main(argv=None):
         else:
             if _load("parse", "parse") or a.parse_target != "builder.parse:parse":
                 spec = run_parse_subprocess(a.parse_target, [list(briefs), tool_api], left() * 0.35, t.path)
+                first_problems = readiness_problems(spec)
+                if first_problems and left() > 0.5 * (deadline - t0):
+                    # one more attempt while more than half the budget is left; kept only if it is fully ready
+                    t.note("spec not ready after the first parse (" + "; ".join(first_problems) + "), parsing once more")
+                    try:
+                        again = run_parse_subprocess(a.parse_target, [list(briefs), tool_api], left() * 0.35, t.path)
+                        if not readiness_problems(again):
+                            spec = again
+                            t.note("second parse is ready, using it")
+                        else:
+                            t.note("second parse is not ready either, keeping the first")
+                    except Exception as e:  # noqa: BLE001
+                        t.error(f"second parse failed: {e!r}; keeping the first")
             else:
                 spec = stub_parse(briefs, tool_api)
         out_dir = pathlib.Path(a.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
@@ -272,7 +324,7 @@ def main(argv=None):
                 t.error("using fallback workflow")
         state = pathlib.Path(STATE_FILE)
         existed = stem in (json.loads(state.read_text()) if state.exists() else {})
-        info = freya.save_workflow(stem, workflow, state_file=STATE_FILE)
+        info = save_with_recovery(freya, stem, workflow, STATE_FILE, t)
         workflow_id, agent_id = info["workflow_id"], info["agent_id"]
         t.freya("workflow " + ("updated" if existed else "created"), workflow_id=workflow_id, agent_id=agent_id, version=info.get("version"))
 
@@ -295,7 +347,7 @@ def main(argv=None):
                 try:
                     workflow = _run_limited(fix, (spec, workflow, failed), max(left() - 8 * 60, 60), "fix")
                     freya.validate_workflow(f"{stem} dryrun", workflow)
-                    info = freya.save_workflow(stem, workflow, state_file=STATE_FILE)
+                    info = save_with_recovery(freya, stem, workflow, STATE_FILE, t)
                     t.freya("workflow updated", workflow_id=workflow_id, version=info.get("version"))
                 except Exception as e:
                     t.error(f"fix round failed: {e!r}; keeping previous workflow"); break

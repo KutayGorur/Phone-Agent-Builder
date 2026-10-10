@@ -13,8 +13,13 @@ def degraded(briefs, api):
 def sleeper(briefs, api): time.sleep(600)
 def guessy(briefs, api):
     s = json.load(open(%r, encoding="utf-8")); s["persuasion"]["attempts"][0]["date"] = "two business days after today"; return s
+def flaky(briefs, api):
+    import pathlib
+    m = pathlib.Path(__file__).with_name("flaky.mark")
+    if m.exists(): return json.loads(%r)
+    m.write_text("1"); s = json.loads(%r); s["parser"] = {"degraded": True, "reason": "first try"}; s["identity"] = None; return s
 def sound(briefs, api): return json.load(open(%r, encoding="utf-8"))
-''' % (json.dumps(GOOD), json.dumps(GOOD), str(ROOT / "builder" / "specs" / "brief-a.spec.json"), str(ROOT / "builder" / "specs" / "brief-a.spec.json"))
+''' % (json.dumps(GOOD), json.dumps(GOOD), str(ROOT / "builder" / "specs" / "brief-a.spec.json"), json.dumps(GOOD), json.dumps(GOOD), str(ROOT / "builder" / "specs" / "brief-a.spec.json"))
 
 
 def run(tmp, target, budget_min=27, extra=()):
@@ -46,6 +51,8 @@ def main():
         rc, tr, _ = run(pathlib.Path(d), "fakeparse:guessy"); assert rc == 0 and end_status(tr) == "degraded" and "compiler guessed" in tr, (rc, tr)
     with tempfile.TemporaryDirectory() as d:   # a real spec with only ignored-field warnings stays ok
         rc, tr, _ = run(pathlib.Path(d), "fakeparse:sound"); assert rc == 0 and end_status(tr) == "ok" and "compiler guessed" not in tr, (rc, tr)
+    with tempfile.TemporaryDirectory() as d:   # first parse not ready, second is: the second one is used, status ok
+        rc, tr, _ = run(pathlib.Path(d), "fakeparse:flaky"); assert rc == 0 and end_status(tr) == "ok" and "second parse is ready" in tr, (rc, tr)
     print("ok")
 
 

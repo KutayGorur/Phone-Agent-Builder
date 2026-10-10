@@ -147,5 +147,70 @@ class ToolContract(unittest.TestCase):
         self.assertIn('does not end with the API path /finish', text)
 
 
+class Backends(unittest.TestCase):
+    def test_gap02_failing_api_falls_back_to_the_cli(self):
+        calls = []
+        old = (llm._call_api, llm._call_cli, os.environ.get('ANTHROPIC_API_KEY'), os.environ.get('PARSER_REPLAY_DIR'), llm.shutil.which)
+        os.environ.pop('PARSER_REPLAY_DIR', None)
+        os.environ['ANTHROPIC_API_KEY'] = 'sk-test-not-real-0000'
+        llm.shutil.which = lambda n: 'claude' if n == 'claude' else None
+        def bad_api(*a):
+            calls.append('api'); raise RuntimeError('Anthropic API 401')
+        def good_cli(*a):
+            calls.append('cli'); return 'ok'
+        llm._call_api, llm._call_cli = bad_api, good_cli
+        try:
+            self.assertEqual(llm.complete('p', 's', 'x'), 'ok')
+            self.assertEqual(calls, ['api', 'cli'])
+            llm._call_cli = lambda *a: (_ for _ in ()).throw(RuntimeError('cli down'))
+            with self.assertRaises(RuntimeError):
+                llm.complete('p', 's', 'x')
+        finally:
+            llm._call_api, llm._call_cli, key, rd, llm.shutil.which = old
+            if key is None:
+                os.environ.pop('ANTHROPIC_API_KEY', None)
+            else:
+                os.environ['ANTHROPIC_API_KEY'] = key
+
+
+class BundleIdentity(unittest.TestCase):
+    def test_gap11_same_final_name_in_two_bundles_does_not_collide(self):
+        from builder.build import bundle_stem
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d) / 'out'
+            a, b = pathlib.Path(d) / 'bank-a' / 'memo.txt', pathlib.Path(d) / 'bank-b' / 'memo.txt'
+            s1 = bundle_stem([str(a)], out)
+            self.assertEqual(s1, 'memo')
+            self.assertEqual(bundle_stem([str(a)], out), 'memo')              # a rerun keeps its slot
+            s2 = bundle_stem([str(b)], out)
+            self.assertNotEqual(s2, 'memo')
+            self.assertEqual(bundle_stem([str(b)], out), s2)
+            self.assertEqual(bundle_stem([str(a), str(b)], out), 'memo-memo')
+
+    def test_gap11_stale_slot_is_created_again_only_on_404(self):
+        from builder.build import save_with_recovery
+        with tempfile.TemporaryDirectory() as d:
+            st = pathlib.Path(d) / 's.json'
+            st.write_text(json.dumps({'x': {'workflow_id': 'w1'}}))
+            class F:
+                n = 0
+                def save_workflow(self, slot, wf, state_file):
+                    F.n += 1
+                    state = json.loads(pathlib.Path(state_file).read_text())
+                    if slot in state:
+                        raise RuntimeError('PUT /api/v2/workflow/w1 -> 404: not found')
+                    state[slot] = {'workflow_id': 'w2'}
+                    pathlib.Path(state_file).write_text(json.dumps(state))
+                    return state[slot]
+            class T:
+                def error(self, m): pass
+            self.assertEqual(save_with_recovery(F(), 'x', {}, str(st), T())['workflow_id'], 'w2')
+            class G(F):
+                def save_workflow(self, slot, wf, state_file):
+                    raise RuntimeError('PUT /api/v2/workflow/w1 -> 401: bad key')
+            with self.assertRaises(RuntimeError):
+                save_with_recovery(G(), 'x', {}, str(st), T())
+
+
 if __name__ == '__main__':
     unittest.main()
