@@ -164,6 +164,14 @@ def free_date(text, today):
             d = _mk(int(m.group(1)), int(m.group(2)), int(m.group(3)))
             if d:
                 return 'date', d
+        raw = str(text).lower()
+        m = re.search(r'(?<![\d/.])(\d{1,2})([/.-])(\d{1,2})\2(\d{2}|\d{4})(?![\d/.])', raw)
+        if m:                                   # an explicit day/month/year is read before anything else
+            a, b = int(m.group(1)), int(m.group(3))
+            if str(CAL.get('dob_order') or 'DMY').upper() == 'MDY':
+                a, b = b, a
+            y = int(m.group(4))
+            return _month_day(a, b, str(y if y > 99 else 2000 + y), today)
         t = digitize(text)
         t = re.sub(r'(\d)\s*(st|nd|rd|th)\b', r'\1', t)
         t = re.sub(r'\s+', ' ', t).strip()
@@ -189,9 +197,9 @@ def free_date(text, today):
             if y and len(y) == 2:
                 y = str(2000 + int(y))
             return _month_day(a, b, y, today)
-        m = re.search(r'\bin (\d{1,3}) (day|days|week|weeks)\b', t)
-        if m:
-            n = int(m.group(1)) * (7 if m.group(2).startswith('week') else 1)
+        m = re.search(r'\b(?:in |after )?(\d{1,3}|a|an) (day|days|week|weeks)(?: (?:from (?:now|today)|later|time))?\b', t)
+        if m and (m.group(0).startswith(('in ', 'after ')) or ' from ' in m.group(0) or m.group(0).endswith(('later', 'time'))):
+            n = (1 if m.group(1) in ('a', 'an') else int(m.group(1))) * (7 if m.group(2).startswith('week') else 1)
             return 'date', today + datetime.timedelta(days=n)
         words = re.findall(r'[a-z]+', t)
         has_wd = any(w in WD_ALIASES for w in words)
@@ -243,19 +251,32 @@ def _dom(dd, today):
     return 'vague', None
 
 
-def free_amount(text):
+def amount_check(text):
+    """Words of a customer -> ('ok', x) | ('unclear', None) | ('none', None). Unclear: a negative number, a range,
+    two different numbers, comma decimals ("150,50") or pence; the caller asks again instead of picking one."""
     try:
-        t = str(text).lower()
-        m = re.search(r'\d[\d,]*(?:\.\d+)?', t)
-        if m:
-            return float(m.group(0).replace(',', ''))
-        d = digitize(t)
-        m = re.search(r'\d+(?:\.\d+)?', d)
-        if m:
-            return float(m.group(0))
+        t = str(text).lower().strip()
+        if not t:
+            return 'none', None
+        if re.search(r'(?<!\w)-\s*[£$€]?\s*\d|\b(minus|negative)\b', t):
+            return 'unclear', None
+        if re.search(r'\d,\d{1,2}(?!\d)|\d\s*p\b|\b(pence|pennies|penny)\b', t):
+            return 'unclear', None
+        nums = set()
+        for x in re.findall(r'\d+(?:,\d{3})*(?:\.\d+)?', digitize(t)):
+            nums.add(float(x.replace(',', '')))
+        if len(nums) > 1:
+            return 'unclear', None
+        if nums:
+            return 'ok', nums.pop()
     except Exception:
         pass
-    return None
+    return 'none', None
+
+
+def free_amount(text):
+    kind, x = amount_check(text)
+    return x if kind == 'ok' else None
 
 
 def free_time(text):
@@ -271,9 +292,15 @@ def free_time(text):
         elif re.search(r'\b(p ?m|afternoon|evening|tonight)\b', t):
             ampm = 'pm'
         mi = 0
+        h24 = False                              # "07:00" and "1900" are 24-hour times, not am or pm
         m = re.search(r'\b(\d{1,2}) ?[:.h] ?(\d{2})\b', t)
+        m4 = re.search(r'\b([01]\d|2[0-3])([0-5]\d)\b', t)
         if m:
             h, mi = int(m.group(1)), int(m.group(2))
+            h24 = len(m.group(1)) == 2 and m.group(1).startswith('0') and ampm is None
+        elif m4 and not ampm:
+            h, mi = int(m4.group(1)), int(m4.group(2))
+            h24 = True
         else:
             m = re.search(r'\b(\d{1,2})\b(?: (\d{2})\b)?', t)
             if not m:
@@ -289,7 +316,7 @@ def free_time(text):
                 mi = 45
         if h > 24 or mi > 59:
             return []
-        if h >= 13:
+        if h >= 13 or h24:
             return [h * 60 + mi]
         if ampm == 'am':
             return [(0 if h == 12 else h) * 60 + mi]
@@ -679,7 +706,9 @@ def offer(st, p, dt, am, lead=''):
     amt = None
     below = False
     if am:
-        a = free_amount(am)
+        kind, a = amount_check(am)
+        if kind == 'unclear':
+            return speak(pre + 'Sorry, I did not catch the amount clearly. Please say it as one number. How much can you pay?')
         if a is not None and a > 0:
             if a + 0.004 < p['fl']:
                 if p['fb']:
