@@ -75,3 +75,9 @@ python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<b
 1. Exact submission mechanism (form/upload/email) and required fields: not in the kit README.
 2. Whether the final briefs come as files, and the exact tool API file names.
 3. That the judges' machine has `claude` CLI or `ANTHROPIC_API_KEY` for the parser (our parser needs it; see the Brief A fresh-clone note in `log-claude-inan.md`).
+
+## Verified on 2026-10-10 (claude-prep)
+- Real `--selftest` on Brief A, our slot: 472 s wall clock, `[END] status=ok model_calls=4` (count now correct), trace has START/STAGE/MODEL/FREYA/SELFTEST/END, no `fak_` key and no bank key in the trace. Self-test result 3/4: PUB-12 (a Brief B case) failed against the Brief A-only agent, which is expected; the default pick does not filter by brief, so pass `--selftest-brief A` (or `--selftest-only`) when self-testing a single brief. Trace timestamps are local time, not UTC.
+- Fresh clone of main, multi-file dry run (`build.py --dry-run briefs/brief-a.md briefs/brief-b.md tools/openapi.json`): wrote `out/brief-a-brief-b.workflow.json`, `.spec.json`, `.source.txt` and a trace named `brief-a-brief-b-<time>.trace.txt`. That run ended `status=degraded` because every `claude` CLI call failed after ~3 s with cost 0 (the machine's Claude usage limit, not a builder bug). So: the parser needs a working `claude` login or API key at run time; check this in pre-flight with a real call, not just `claude --version`.
+- Freya judge can hang: a sim stayed 'running' for 45+ min on one call whose transcript was fine. Cancel with `POST /api/v2/simulations/<id>/cancel` (`freya.api("POST", f"/api/v2/simulations/{sid}/cancel", {})`). `/stop` does not exist. Builds do not depend on sims.
+- Cloudflared is installed on Kutay's machine, but starting a public tunnel was blocked by the session's permission mode, so Brief D has not been simulated against the stand-in bank.
