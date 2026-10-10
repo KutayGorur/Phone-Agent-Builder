@@ -253,13 +253,20 @@ def _dom(dd, today):
 
 def amount_check(text):
     """Words of a customer -> ('ok', x) | ('unclear', None) | ('none', None). Unclear: a negative number, a range,
-    two different numbers, comma decimals ("150,50") or pence; the caller asks again instead of picking one."""
+    two different numbers, comma decimals ("150,50") or pence without a whole amount; the caller asks again instead of picking one."""
     try:
         t = str(text).lower().strip()
         if not t:
             return 'none', None
         if re.search(r'(?<!\w)-\s*[£$€]?\s*\d|\b(minus|negative)\b', t):
             return 'unclear', None
+        d = digitize(t)
+        m = re.search(r'(\d[\d,]*) ?,? ?(?:point|decimal|dot) ((?:\d ?)+)', d)
+        if m:
+            return 'ok', float(m.group(1).replace(',', '') + '.' + m.group(2).replace(' ', ''))
+        m = re.search(r'(\d[\d,]*)(?: [a-z]+)?(?: and)? (\d{1,2}) (?:pence|penny|pennies|p|cents?|c)\b', d)
+        if m:
+            return 'ok', float(m.group(1).replace(',', '')) + int(m.group(2)) / 100.0
         if re.search(r'\d,\d{1,2}(?!\d)|\d\s*p\b|\b(pence|pennies|penny)\b', t):
             return 'unclear', None
         nums = set()

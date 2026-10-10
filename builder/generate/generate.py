@@ -139,7 +139,14 @@ def verify_pre(q, E):
                  "        s, val, amb = normalize_dob(a, %s, today)\n"
                  "        if s == 'ok' and val:\n            a = val\n" % repr({'dob_order': E['cal'].get('dob_order')}))
     elif digits:
-        body += "        dg = re.sub(r'[^0-9]', '', a)\n        if len(dg) >= %d:\n            a = dg[-%d:]\n" % (digits, digits)
+        key = 'part_%s' % re.sub(r'[^a-z0-9_]', '', field)
+        body += ("        dg = re.sub(r'[^0-9]', '', a)\n"
+                 "        prev = str(vars.get('%s') or '')\n"
+                 "        if 0 < len(dg) < %d and len(prev + dg) == %d:\n            dg = prev + dg\n            prev = ''\n"
+                 "        elif 0 < len(dg) < %d:\n            prev = dg\n"
+                 "        else:\n            prev = ''\n"
+                 "        vars['%s'] = prev\n"
+                 "        if len(dg) >= %d:\n            a = dg[-%d:]\n" % (key, digits, digits, digits, key, digits, digits))
     body += "        b['answer'] = a\nexcept Exception:\n    pass\n"
     if not dob:
         funcs = 'import re\n'
@@ -273,7 +280,7 @@ def generate(spec):
         fn = api_fn(tool, {'field': ('string', q.get('field')), 'answer': ('string', '{{answer}}')},
                     pre=verify_pre(q, E), post=verify_post(q, i, n), retries=1, path=idn.get('tool') or 'verify_identity',
                     description='CALL this every time the customer gives %s. Pass exactly what the customer said (%s). Never call it without an answer '
-                                'given in this call and never guess one.' % (q.get('ask'), q.get('format') or 'as said'))
+                                'given in this call, never with only a part of the answer, and never guess one.' % (q.get('ask'), q.get('format') or 'as said'))
         fn['function']['parameters']['properties']['body']['properties']['answer']['description'] = (
             'The customer\'s answer to: %s. Format: %s.' % (q.get('ask'), q.get('format') or 'as said'))
         fn['function']['parameters']['properties']['body']['required'] = ['answer']
@@ -281,7 +288,10 @@ def generate(spec):
         first = ('Briefly say that you need to ask %d security question%s first. ' % (n, '' if n == 1 else 's')) if i == 1 else 'Say thank you in two words. '
         task = ('Current step: security check, question %d of %d. %sThen ask for %s, only this one question, in one short sentence. {{idv_note}}\n'
                 'When the customer gives an answer, CALL the tool %s with it. Never guess an answer. After a tool result, follow its what_to_do_next and '
-                'speak. Do not mention any product, amount, debt, payment or collections, and say nothing about the reason for the call; if asked '
+                'speak. The customer may give the answer in parts over several turns. A part is not an answer: do not call the tool with it and do not '
+                'say it did not match. Say only "And the rest?", then join the parts in the order they were said and CALL the tool with the whole '
+                'answer. If a message holds an answer together with a question or a remark, CALL the tool with the answer first; a question '
+                'never replaces the call. Do not mention any product, amount, debt, payment or collections, and say nothing about the reason for the call; if asked '
                 'what the call is about, say you can only explain after the security check.' % (i, n, first, q.get('ask'), tool))
         stance_enum = ['declines', 'human', 'other'] if E['human'] else ['declines', 'other']
         stance = ext('x_stance', 'declines = the customer declines to answer, does not want to continue, or asks what the call is about / why they are '

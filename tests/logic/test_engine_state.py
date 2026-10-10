@@ -96,12 +96,13 @@ class Parsing(unittest.TestCase):
 
     def test_acc13_unclear_amounts_are_not_picked(self):
         ac = self.ns['amount_check']
-        for t in ('150,50', '-150', 'minus fifty', '150 to 200', '150-200', '150 and fifty pence', '150p'):
+        for t in ('150,50', '-150', 'minus fifty', '150 to 200', '150-200', 'fifty pence', '150p'):
             self.assertEqual(ac(t)[0], 'unclear', t)
             self.assertIsNone(self.ns['free_amount'](t), t)
         self.assertEqual(ac('one hundred and fifty'), ('ok', 150.0))
         self.assertEqual(ac('1,500'), ('ok', 1500.0))
         self.assertEqual(ac('150.50'), ('ok', 150.5))
+        self.assertEqual(ac('150 and fifty pence'), ('ok', 150.5))
         self.assertEqual(ac('£150'), ('ok', 150.0))
 
     def test_acc13_engine_asks_again(self):

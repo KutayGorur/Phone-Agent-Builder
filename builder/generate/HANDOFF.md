@@ -63,3 +63,16 @@ Checked each item against the brief text, the golden specs and the engine. One c
 ## Task 01 result (2026-10-10T17:37Z, claude-inan): PUB-10 was the word "recorded" in the opening
 Evidence: call 8bc9c1cb-3919-4d32-a7f3-246d8d5ee965. The agent did everything right (first create_promise failed, retry succeeded, said "recorded" only after it), and the judge still failed the check "does not say 'recorded' before a successful call" because of "this call is recorded" in message 0. Same finding as the earlier 3-rep run, so it is repeatable, not noise.
 Fix (`ecfg.first_sentence`): when the opening is composed from `first_sentence_must_include` and a part is "call is recorded", it is spoken as "we are recording this call". Same statement, different word. A `first_sentence` the brief gives word for word is left alone. PUB-10 then passed (simulation ed8a0ab0-da50-49a5-9251-f39033ec858b).
+
+## Task 02 result (2026-10-10T18:25Z, claude-inan): security answers given in parts
+Evidence: `--style pieces` on Brief A, 6/10. Calls 83da5c21-84ba-4015-99f9-f9a0dd084288 (PUB-05) and f9a1795e-a20a-4662-ba37-5e038c41a954 (PUB-09): the customer says "eighty eight", then "forty six"; each half went to `verify_identity` as a wrong answer and the check locked. For the date of birth the model never joined "11 August" and "1981" and kept asking for the full date (PUB-09, 20+ turns).
+Fix (`generate.py`): the `idq_i` task and the tool description say a part is not an answer, the agent says "And the rest?" and calls the tool with the joined answer. Backup in the digits pre hook: a short answer is kept in `vars['part_<field>']` and joined with the next short answer when together they have the right length. Test: `tests/logic/test_identity_parts.py`.
+Verified on Freya (inan-gen-a v3, `--style pieces`, PUB-03/05/06/09): all four verify with no wasted attempt; PUB-03 still counts three wrong answers.
+
+## Task 02 result (2026-10-10T19:00Z, claude-inan): spoken amounts lost their pence
+Evidence: `--style corrects` on Brief A, PUB-06, call 1876d421-33bb-447b-91f7-580de9a78f64. Extraction was right (`x_amount` = "six hundred and thirty-seven pounds and fifty pence"), `free_amount` read 637.0, below the floor 637.50, so the engine answered "I cannot record less than the minimum payment" and the judge counted a second floor offer.
+Fix (`engine_lib.free_amount`): "N <unit> and M pence/cents" and "N point/decimal d d" keep the fraction. Test: `tests/logic/test_amounts.py`. Not handled: "six thirty-seven fifty" with no unit word (read as 637).
+
+## Task 02 result (2026-10-10T19:20Z, claude-inan): a security answer said together with a question was not checked
+Evidence: hard script PUB-03, call 4ed23f66-deec-4d92-9c67-1f4b3827ecff. Third answer "the twenty-first of July, nineteen ninety. How much do I owe?": the model answered the question and never called `verify_identity`, so the third wrong answer was not counted and the call closed as `declined` instead of `failed`.
+Fix (`generate.py`, `idq_i` task): an answer that comes with a question or a remark goes to the tool first. Verified on Freya (inan-gen-a v5, hard PUB-03): three verify calls, closes `not_verified` / `failed`.
