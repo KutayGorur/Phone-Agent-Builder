@@ -542,7 +542,7 @@ def cur_question(st):
     return offer_q(st, p) or E['first_q']
 
 
-def reask(st, lead='', kind='question'):
+def reask(st, lead='', kind='question', then=True):
     """The customer said something that needs no policy change: answer it and ask the pending question again."""
     q = cur_question(st)
     if not st.get('hard_pending') and st['phase'] != 'confirm' and not st['all']:
@@ -553,7 +553,7 @@ def reask(st, lead='', kind='question'):
            'use only these facts: ' + facts(st) + '. If the facts do not answer it, say exactly "' +
            E['unknown_say'] + '". Never invent figures, dates or reasons, and never offer a discount, waiver or '
            'payment plan. If they ask whether you are a robot or an AI, say "' + E['ai_say'] + '". '
-           'If they ask whether this call is a scam, say that ' + E['scam_say'] + '. Then say: ' + q)
+           'If they ask whether this call is a scam, say that ' + E['scam_say'] + '.' + (' Then say: ' + q if then else ''))
     ask((lead + ' ' if lead else '') + ans)
 
 
@@ -1012,7 +1012,7 @@ def turn(st):
     turn_inner(st)
     if q == 'yes' and vars.get('route') in ('fin', 'note') and not st.get('transfer'):
         st['defer'] = vars['route']                # answer first; the close follows on the next turn
-        reask(st, 'The customer also asked a question before the call ends. Answer it, then ask nothing further.')
+        reask(st, 'The customer also asked a question before the call ends. Answer it, then ask nothing further.', then=False)
         return
     if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text'):
         core = vars['say_text']
@@ -1257,6 +1257,10 @@ def set_create(st):
 def created(st):
     if st.get('ackw'):                             # the line after a record was spoken: on to the next promise
         st['ackw'] = 0
+        if S('x_intent').lower() not in ('', 'none', 'agree', 'question', 'evasive'):
+            st['cq'] = []                          # the customer spoke up: what is not recorded yet goes back to the read-back
+            st['phase'] = 'confirm'
+            return turn(st)
         return set_create(st)
     ok = S('cp_ok').lower() == 'true'
     p = st['prods'][st['cq'][0]]
@@ -1448,7 +1452,12 @@ def main():
     try:
         if st.get('defer'):
             r, st['defer'] = st['defer'], ''
-            route(r)
+            I = E['intents'].get(S('x_intent').lower()) or {}
+            if I.get('kind') == 'transfer':        # asked for a person or a plan while the close was waiting: that comes first
+                vars['x_intent'] = 'none'
+                do_transfer(st, I['queue'], I['close']['outcome'], I['close'].get('reason'), I.get('transfer_say') or 'I am transferring you now.')
+            else:
+                route(r)
         elif S('x_stance').lower() in ('declines', 'human'):
             idv_event(st)
         elif st['phase'] == 'tp':

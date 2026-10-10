@@ -152,5 +152,62 @@ class R5R6History(unittest.TestCase):
         self.assertEqual([x['note'] for x in p.st['prods']], ['hardship', 'hardship'])
 
 
+class R7Interruptions(unittest.TestCase):
+    def _after_first_record(self):
+        p = probe_with('g', [G1, G2])
+        p.say('agree')
+        p.say('agree')
+        p.create()
+        self.assertEqual(p.v['route'], 'say')
+        return p
+
+    def test_r7_transfer_request_during_the_acknowledgement(self):
+        p = self._after_first_record()
+        p.say('sp_restructuring')
+        self.assertEqual(p.v['route'], 'transfer')
+        self.assertEqual(p.prod(1)['status'], 'agreed')                  # never recorded
+        p.v['tr_ok'] = 'true'
+        p.run()
+        self.assertEqual((p.v['route'], p.v['close_outcome']), ('fin', 'handoff'))
+
+    def test_r7_correction_during_the_acknowledgement_goes_back_to_the_readback(self):
+        p = self._after_first_record()
+        p.say('change', date='Friday', product='charge card')
+        self.assertNotEqual(p.v['route'], 'create')
+        self.assertEqual(p.prod(0)['status'], 'recorded')
+        self.assertEqual(p.prod(1)['date'], '2026-10-16')
+        self.assertNotIn('term loan', p.text)                            # only the unrecorded one is read back
+        p.say('agree')
+        self.assertEqual((p.v['route'], p.v['cp_pid'], p.v['cp_date']), ('create', 'g2', '2026-10-16'))
+
+    def test_r7_plain_continuation_still_records_the_next(self):
+        p = self._after_first_record()
+        p.say('none')
+        self.assertEqual((p.v['route'], p.v['cp_pid']), ('create', 'g2'))
+
+    def test_r7_close_question_gets_an_answer_without_negotiation_text(self):
+        p = Probe(products=(PERSONAL,))
+        p.say('sp_already_paid', q='yes')
+        self.assertEqual(p.v['route'], 'ask')
+        self.assertIn('ask nothing further', p.v['instruction'])
+        self.assertNotIn('Then say', p.v['instruction'])
+        self.assertNotIn('make this payment', p.v['instruction'])
+
+    def test_r7_transfer_request_while_the_close_waits(self):
+        p = Probe(products=(PERSONAL,))
+        p.say('sp_already_paid', q='yes')
+        p.say('sp_restructuring')
+        self.assertEqual(p.v['route'], 'transfer')
+        p.v['tr_ok'] = 'true'
+        p.run()
+        self.assertEqual(p.v['close_outcome'], 'transferred')
+
+    def test_r7_silent_next_turn_still_closes(self):
+        p = Probe(products=(PERSONAL,))
+        p.say('sp_already_paid', q='yes')
+        p.say('none')
+        self.assertEqual(p.v['route'], 'note')
+
+
 if __name__ == '__main__':
     unittest.main()
