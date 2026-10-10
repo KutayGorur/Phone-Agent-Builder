@@ -258,7 +258,7 @@ def amount_check(text):
         t = str(text).lower().strip()
         if not t:
             return 'none', None
-        if re.search(r'(?<!\w)-\s*[£$€]?\s*\d|\b(minus|negative)\b', t):
+        if re.search(r'(?<!\w)-\s*[^\w\s]?\s*\d|\b(minus|negative)\b', t):
             return 'unclear', None
         d = digitize(t)
         m = re.search(r'(\d[\d,]*) ?,? ?(?:point|decimal|dot) ((?:\d ?)+)', d)

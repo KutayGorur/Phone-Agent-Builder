@@ -28,8 +28,8 @@ def _load(module, name):
 
 def stub_parse(brief_paths, tool_api_path):
     tr.note("parse: STUB (builder.parse not available), spec carries only raw inputs")
-    return {"meta": {"stub": True}, "raw_briefs": [pathlib.Path(p).read_text(encoding="utf-8") for p in brief_paths],
-            "tools": json.loads(pathlib.Path(tool_api_path).read_text(encoding="utf-8")), "extra_rules": []}
+    return {"meta": {"stub": True}, "raw_briefs": [pathlib.Path(p).read_text(encoding="utf-8-sig") for p in brief_paths],
+            "tools": json.loads(pathlib.Path(tool_api_path).read_text(encoding="utf-8-sig")), "extra_rules": []}
 
 
 def stub_generate(spec):
@@ -58,6 +58,9 @@ def _run_limited(fn, args, seconds, what):
 
 _CHILD = """
 import json, sys, traceback
+for _s in (sys.stdout, sys.stderr):
+    try: _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
 sys.path.insert(0, sys.argv[1])
 from builder import trace as tr
 tr.set_current(tr.Trace(sys.argv[5] or None, echo=True))
@@ -156,6 +159,9 @@ def run_selftest(agent_id, brief, timeout_s, t, label, workflow_file, cases_file
 
 
 def main(argv=None):
+    for _s in (sys.stdout, sys.stderr):    # a piped Windows console is cp1252: never let a character abort the build
+        try: _s.reconfigure(encoding="utf-8", errors="replace")
+        except Exception: pass
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("files", nargs="+", help="brief file(s) followed by the tool API file")
     ap.add_argument("--out-dir", default=str(ROOT / "out"))
@@ -194,7 +200,7 @@ def main(argv=None):
     try:
         t.stage("parse")
         if a.spec_file:
-            spec = json.loads(pathlib.Path(a.spec_file).read_text(encoding="utf-8"))
+            spec = json.loads(pathlib.Path(a.spec_file).read_text(encoding="utf-8-sig"))
             t.note(f"parse skipped: spec loaded from {a.spec_file}")
         else:
             if _load("parse", "parse") or a.parse_target != "builder.parse:parse":

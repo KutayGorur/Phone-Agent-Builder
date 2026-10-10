@@ -95,17 +95,37 @@ def complete(purpose, system, prompt, model=None, max_tokens=24000, timeout=420)
 
 
 def extract_json(text):
-    """Pull the outermost JSON object out of a model answer (fenced or not)."""
+    """The JSON object in a model answer: a fenced block first, else the first object that decodes, whatever text
+    surrounds it (a brace in the commentary, a bracketed note before it). Two different objects in one answer are
+    ambiguous (one may be a correction), so that raises and the caller's retry path runs."""
     s = text.strip()
     if "```" in s:
-        parts = s.split("```")
-        for part in parts[1::2]:
+        for part in s.split("```")[1::2]:
             part = part[4:] if part.startswith("json") else part
             if part.strip().startswith(("{", "[")):
                 s = part.strip()
                 break
-    start = min([i for i in (s.find("{"), s.find("[")) if i >= 0], default=-1)
-    if start < 0:
-        raise ValueError("no JSON in model answer")
-    end = max(s.rfind("}"), s.rfind("]"))
-    return json.loads(s[start:end + 1])
+    dec = json.JSONDecoder()
+    found, i = [], 0
+    while True:
+        i = s.find("{", i)
+        if i < 0:
+            break
+        try:
+            obj, end = dec.raw_decode(s, i)
+        except ValueError:
+            i += 1
+            continue
+        if isinstance(obj, dict):
+            found.append(obj)
+            if len(found) > 1 and found[1] != found[0]:
+                break
+        i = end
+    if not found:
+        start = s.find("[")
+        if start < 0:
+            raise ValueError("no JSON in model answer")
+        return dec.raw_decode(s, start)[0]          # an answer that is a bare array
+    if len(found) > 1 and found[1] != found[0]:
+        raise ValueError("ambiguous model answer: more than one JSON object")
+    return found[0]

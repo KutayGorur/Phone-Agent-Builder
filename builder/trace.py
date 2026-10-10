@@ -39,13 +39,26 @@ class Trace:
                 with self.path.open("a", encoding="utf-8") as f:
                     f.write(line + "\n")
             if self.echo:
-                print(line, flush=True)
+                try:
+                    print(line, flush=True)
+                except UnicodeEncodeError:     # a console code page (cp1252 behind a pipe) that cannot show the character: the file keeps it
+                    print(line.encode("ascii", "backslashreplace").decode("ascii"), flush=True)
 
     def start(self, **info):
         self._line("START", " ".join(f"{k}={v}" for k, v in info.items()))
 
+    def logged_model_calls(self):
+        """Calls made in this process plus those a child process (the parser) wrote to the same trace file."""
+        n = self.model_calls
+        try:
+            if self.path and self.path.exists():
+                n = max(n, sum(1 for l in self.path.read_text(encoding="utf-8", errors="replace").splitlines() if " [MODEL] " in l))
+        except OSError:
+            pass
+        return n
+
     def end(self, status, **info):
-        self._line("END", f"status={status} elapsed={time.time() - self.t0:.0f}s model_calls={self.model_calls} " + " ".join(f"{k}={v}" for k, v in info.items()))
+        self._line("END", f"status={status} elapsed={time.time() - self.t0:.0f}s model_calls={self.logged_model_calls()} " + " ".join(f"{k}={v}" for k, v in info.items()))
 
     def note(self, msg): self._line("INFO", msg)
     def stage(self, name): self._line("STAGE", name)

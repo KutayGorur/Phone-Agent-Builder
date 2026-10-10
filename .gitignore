@@ -5,3 +5,5 @@ apikey.txt
 out/
 results/
 __pycache__/
+.freya-agents.json
+.personas.json

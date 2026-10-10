@@ -92,13 +92,25 @@ def split_units(text, tag=None):
     return units
 
 
+def read_text_file(p):
+    """A brief as text: UTF-8 with or without a BOM. Binary documents and other encodings fail with a clear message
+    instead of being silently altered (replacing characters could corrupt codes, limits or required wording)."""
+    raw = pathlib.Path(p).read_bytes()
+    if raw[:5] == b"%PDF-" or raw[:2] == b"PK":
+        raise ValueError(f"{p}: this looks like a PDF or Office file; the builder reads text briefs only. Export it as a UTF-8 text or Markdown file.")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        raise ValueError(f"{p}: not valid UTF-8 ({e.reason} at byte {e.start}); save the file as UTF-8 and run again.") from None
+
+
 def load_briefs(paths):
     """Read brief files in precedence order and return (units, sources) with file tags when there are several."""
     paths = [pathlib.Path(p) for p in paths]
     multi = len(paths) > 1
     units, sources = [], []
     for p in paths:
-        text = p.read_text(encoding="utf-8")
+        text = read_text_file(p)
         tag = file_tag(p) if multi else None
         sources.append({"file": p.name, "tag": tag})
         for u in split_units(text, tag):

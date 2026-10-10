@@ -21,7 +21,7 @@ def _fields(props, required):
 
 
 def tools_from_openapi(path):
-    api = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    api = json.loads(pathlib.Path(path).read_text(encoding="utf-8-sig"))
     tools = {}
     for route, methods in api.get("paths", {}).items():
         for method, op in methods.items():
