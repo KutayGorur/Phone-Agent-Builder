@@ -112,6 +112,9 @@ def validate(spec, units, tools):
                 for ref in re.findall(r"\b[a-z0-9]+:(?:p|t)?\d+\b|\b(?:p|t)\d+\b", part):
                     pass
                 continue
+            if re.search(r"\s", part) and not re.fullmatch(r"[\w.\[\]:\-]+(\s*,\s*[\w.\[\]:\-]+)*", part) and not path_exists(spec, part):
+                warnings.append(f"rule_coverage[{uid}] = '{part}' is prose, not a spec path; treated as context")
+                continue
             if not path_exists(spec, part):
                 errors.append(f"rule_coverage[{uid}] points to '{part}', which does not exist in the spec")
 

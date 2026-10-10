@@ -47,10 +47,13 @@ def _call_cli(model, system, prompt, timeout):
     if not exe:
         raise RuntimeError("no ANTHROPIC_API_KEY and no `claude` CLI on PATH: cannot call a model")
     cmd = [exe, "-p", "--model", model, "--output-format", "json", "--tools", "",
-           "--no-session-persistence", "--system-prompt", system]
+           "--no-session-persistence", "--system-prompt",
+           "You are a precise component of a software pipeline. Follow the instructions in the user message and answer exactly in the format they ask for."]
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE") and k != "CLAUDECODE"}
     with tempfile.TemporaryDirectory() as cwd:   # empty cwd: no project memory or settings leak into the call
-        p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        # the long instructions go through stdin: a Windows command line is limited to about 32k characters
+        stdin = "<instructions>" + chr(10) + system + chr(10) + "</instructions>" + chr(10) * 2 + prompt
+        p = subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=timeout, cwd=cwd, env=env)
     if p.returncode != 0:
         raise RuntimeError(f"claude CLI failed ({p.returncode}): {(p.stderr or p.stdout)[:500]}")
@@ -63,9 +66,25 @@ def _call_cli(model, system, prompt, timeout):
     return out.get("result", "")
 
 
+def _replay(purpose, system, prompt):
+    """Development aid: with PARSER_REPLAY_DIR set, prompts are written there and answers are read from <slug>.answer.txt."""
+    import pathlib, re
+    d = pathlib.Path(os.environ["PARSER_REPLAY_DIR"])
+    d.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"\W+", "_", purpose)[:60]
+    (d / "system.txt").write_text(system, encoding="utf-8")
+    (d / f"{slug}.prompt.txt").write_text(prompt, encoding="utf-8")
+    ans = d / f"{slug}.answer.txt"
+    if not ans.exists():
+        raise RuntimeError(f"replay: no answer file {ans.name}")
+    return ans.read_text(encoding="utf-8")
+
+
 def complete(purpose, system, prompt, model=None, max_tokens=24000, timeout=420):
     """Return the model's text. Raises on failure (the caller decides whether to retry)."""
     model = model or DEFAULT_MODEL
+    if os.environ.get("PARSER_REPLAY_DIR"):
+        return _replay(purpose, system, prompt)
     t0 = time.time()
     backend = "api" if os.environ.get("ANTHROPIC_API_KEY") else "cli"
     _log(model, purpose, backend=backend, prompt_chars=len(prompt))

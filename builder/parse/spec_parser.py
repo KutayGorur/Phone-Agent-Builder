@@ -258,3 +258,26 @@ def parse(brief_paths, tool_api_path):
 def _for_prompt(spec):
     s = {k: v for k, v in spec.items() if k not in ("tools", "tools_server", "parser", "_open_questions")}
     return s
+
+
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser(description="brief file(s) + tool API file -> spec.json")
+    ap.add_argument("files", nargs="+", help="brief file(s) followed by the tool API file")
+    ap.add_argument("--out", default=None, help="write the spec here (default: stdout)")
+    a = ap.parse_args(argv)
+    spec = parse(a.files[:-1], a.files[-1])
+    text = json.dumps(spec, indent=1, ensure_ascii=False)
+    if a.out:
+        pathlib.Path(a.out).write_text(text, encoding="utf-8")
+        p = spec["parser"]
+        print(f"spec written to {a.out}: degraded={p['degraded']} unresolved_errors={len(p.get('unresolved_errors', []))} warnings={len(p.get('warnings', []))}")
+    else:
+        print(text)
+
+
+if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from builder.parse.spec_parser import main as _main
+    _main()
