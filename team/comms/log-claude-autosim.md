@@ -7,3 +7,13 @@
 - Green on A (70 scenarios), A+B (93), F (51), G (113), H (83). Mutation checks: dropping an outcome from the table or using an outcome the API rejects is reported.
 - `drive()` in local_sim.py got `raw` and `cycle` options; variant specs missing on a fresh clone (C/D/E live in gitignored out/) are now skipped instead of crashing the run.
 - Test: `python3 -m unittest tests.logic.test_auto_sim`. CLI: `python -m builder.generate.auto_sim <spec> <tool_api> [-v] [--only name]`.
+
+## 2026-10-10 idea 3 done: enum guard
+- `builder/parse/enum_repair.py` finds outcomes, queues, note reasons, identity fields and tool names in the spec that the tool API does not allow; `auto_repair` renames only spelling variants (case, separators, plural; never drops "not_"). `spec_parser.guard_enums` adds one targeted model repair for the rest (kept only if it reduces the problems) and revalidates. `build.py` stage runs it in a child process before generating; unresolved values keep the build degraded through the parser's unresolved errors. Skipped with a trace line when a fake parser or `--spec-file` is used.
+- Tests: `tests/logic/test_enum_repair.py`.
+
+## 2026-10-10 diagnosis of the two fresh-clone local_sim failures (D TD-03, E TE-04)
+Both are spelling variance in the spec that the compiler silently ignored, and both reproduce without any model call:
+- TD-03 (second promise 480, expected 120): the overdraft floor is a computed 25 % of arrears. The compiler reads `amounts.floor_formula_by_product {type: {field, percent_of_field}}`, but neither SPEC_CONTRACT nor the parser prompt ever named that key, so a fresh parse spells it another way (text such as "25% of arrears" in floor_field_by_product, `percent`, `fraction`, ...) and the floor fell back to the full amount. Fix: `ecfg.floor_rules/_formula` accept those shapes; a product type with no floor rule now gives a compile warning; the contract and the parser prompt name the key.
+- TE-04 (steps left after close): `multi_product.dispute_or_paid_continues` is in SPEC_CONTRACT but the compiler only read `continue_with_other_products` inside the intent action, so a spec that states it only in multi_product closed the call after the dispute. Fix: the contract flag now sets `continues` for dispute and already_paid.
+- Tests: `tests/logic/test_parser_variance.py` (fail without the ecfg change, pass with it). I could not re-parse C/D/E here (no working model login in the cloud container), so the exact fresh specs were not inspected: re-run the RUNBOOK loop on the PC to confirm TD-03 and TE-04 now pass.

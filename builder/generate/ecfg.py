@@ -81,13 +81,79 @@ def _date_tok(t, warn=None, where='persuasion attempt'):
     return tok
 
 
+_PCT_KEYS = ('percent_of_field', 'percent', 'percentage', 'pct', 'percent_of_overdue', 'percent_of_arrears')
+_FRAC_KEYS = ('fraction', 'ratio', 'multiplier', 'factor')
+
+
+def _formula(v, f_pd, fields=None):
+    """A floor computed from the product: {'field', 'percent_of_field'} from any shape a parser may produce
+    ({"field": "arrears", "percent": 25}, "25% of arrears", 0.25, ...). None when no percentage can be read."""
+    pct, field = None, None
+    if isinstance(v, dict):
+        for k in _PCT_KEYS:
+            if isinstance(v.get(k), (int, float)) and not isinstance(v.get(k), bool):
+                pct = float(v[k]); break
+        for k in _FRAC_KEYS:
+            if pct is None and isinstance(v.get(k), (int, float)) and not isinstance(v.get(k), bool):
+                pct = float(v[k]) * 100.0
+        for k in ('field', 'of', 'base_field', 'of_field', 'applied_to'):
+            if isinstance(v.get(k), str):
+                field = v[k]; break
+        if field is None and isinstance(v.get('percent_of'), str):
+            field = v['percent_of']
+        if pct is None and isinstance(v.get('percent_of_field'), str):
+            return None
+    elif isinstance(v, str):
+        m = re.search(r'(\d+(?:\.\d+)?)\s*(?:%|per\s*cent|percent)', v, re.I)
+        if m:
+            pct = float(m.group(1))
+            m2 = re.search(r'\bof\s+(?:the\s+)?([A-Za-z_]+)', v)
+            field = m2.group(1) if m2 else None
+    elif isinstance(v, (int, float)) and not isinstance(v, bool):
+        pct = float(v) * 100.0 if 0 < v <= 1 else float(v)
+    if pct is None or pct <= 0 or pct > 100:
+        return None
+    if fields and field not in fields:
+        field = f_pd
+    return {'field': field or f_pd, 'percent_of_field': pct}
+
+
+def floor_rules(amts, f_pd, fields=None):
+    """-> (floor_field_by_product, floor_formula_by_product). Field names stay; entries that are really formulas
+    (a percentage text or object in floor_field_by_product, floor_percent_by_product) are moved to the formulas."""
+    ff, fm = {}, {}
+    for t, f in (amts.get('floor_field_by_product') or {}).items():
+        if isinstance(f, str) and (not fields or f in fields) and not re.search(r'%|percent|per\s*cent', f, re.I):
+            ff[t] = f
+        elif f:
+            r = _formula(f, f_pd, fields)
+            if r:
+                fm[t] = r
+            elif isinstance(f, str):
+                ff[t] = f
+    for key in ('floor_percent_by_product', 'floor_percentage_by_product'):
+        for t, v in (amts.get(key) or {}).items():
+            r = _formula(v if isinstance(v, dict) else {'percent': v} if isinstance(v, (int, float)) else v, f_pd, fields)
+            if r:
+                fm[t] = r
+    for t, v in (amts.get('floor_formula_by_product') or {}).items():
+        r = _formula(v, f_pd, fields)
+        if r:
+            fm[t] = r
+    return ff, fm
+
+
 def _words(field):
     return _s(field).replace('_', ' ')
 
 
 def normalize_intents(spec):
     out = {}
-    note_reasons = ((spec.get('multi_product') or {}).get('note_reasons')) or []
+    mp = spec.get('multi_product') or {}
+    note_reasons = mp.get('note_reasons') or []
+    # SPEC_CONTRACT: multi_product.dispute_or_paid_continues says these two intents note the product and go on with the others,
+    # even when the intent's own action does not repeat it (a parser may put the fact in either place)
+    cont_ids = ('dispute', 'already_paid') if mp.get('dispute_or_paid_continues') else ()
     for it in spec.get('intents') or []:
         iid = it.get('id')
         if not iid:
@@ -121,7 +187,7 @@ def normalize_intents(spec):
             else:
                 c = act['close'] if isinstance(act['close'], dict) else {}
                 d['note_reason'] = c.get('reason') or c.get('outcome')
-            d['continues'] = bool(act.get('continue_with_other_products') or act.get('continue'))
+            d['continues'] = bool(act.get('continue_with_other_products') or act.get('continue') or iid in cont_ids)
         elif it.get('continue'):
             d['kind'] = 'continue'
         else:
@@ -145,13 +211,19 @@ def _build(spec, warns_out):
     closing = spec.get('closing') or {}
     intents = normalize_intents(spec)
 
-    floor_field = amts.get('floor_field_by_product') or {}
-    floor_word = {t: _words(f) for t, f in floor_field.items() if f}
-    floor_word = {t: ('minimum payment' if (f or '') in ('minimum_payment', 'minimum_due') else _words(f)) for t, f in floor_field.items() if f}
-    for t in (amts.get('floor_formula_by_product') or {}):
-        floor_word.setdefault(t, 'minimum payment')
-
     warns = warns_out
+    inc0 = ds.get('include') or []
+    f_pd0 = amts.get('past_due_field') or (inc0[0] if len(inc0) > 0 else 'past_due')
+    tl = spec.get('tools') or {}
+    tl = tl.get('tools') if isinstance(tl.get('tools'), dict) else tl
+    items = (((tl.get('get_account') or {}).get('response_fields') or {}).get('products') or {}).get('items') or {}
+    floor_field, formula = floor_rules(amts, f_pd0, set(items) or None)
+    floor_word = {t: ('minimum payment' if (f or '') in ('minimum_payment', 'minimum_due') else _words(f)) for t, f in floor_field.items() if f}
+    for t in formula:
+        floor_word.setdefault(t, 'minimum payment')
+    for t in ((items.get('type') or {}).get('enum') or []):
+        if t not in floor_field and t not in formula:
+            warns.append('product type %s has no floor rule (floor_field_by_product or floor_formula_by_product): its floor is the full past-due amount' % t)
     pe = []
     for i, a in enumerate(pers.get('attempts') or []):
         n_ = a.get('n') or i + 1
@@ -271,7 +343,6 @@ def _build(spec, warns_out):
     cq = op_confirm = opening.get('confirm_identity_question') or 'Am I speaking with {title} {last_name}?'
     mwho = re.search(r'with (.+?)\?', cq)
     who = (mwho.group(1) if mwho else '{title} {last_name}').replace('{', '{{').replace('}', '}}')
-    formula = amts.get('floor_formula_by_product') or {}
     E = {
         'cal': cal, 'acct_node': 'get_account', 'f_pd': f_pd, 'f_days': f_days, 'pd_word': pd_word, 'days_word': days_word,
         'who': who, 'formula': formula, 'pn': ds.get('product_names') or {}, 'floor_field': floor_field,
@@ -353,11 +424,11 @@ CONSUMED = {
     'third_party': {'callback', 'wrong_number', 'deceased', 'say_nothing_beyond_opening', 'relative_may_not_verify_or_pay'},
     'identity': {'questions', 'tool', 'on_declined', 'on_failed', 'hints'},
     'debt_statement': {'say', 'product_names', 'include'},
-    'amounts': {'past_due_field', 'floor_field_by_product', 'floor_formula_by_product'},
+    'amounts': {'past_due_field', 'floor_field_by_product', 'floor_formula_by_product', 'floor_percent_by_product', 'floor_percentage_by_product'},
     'persuasion': {'first_question', 'attempts', 'on_exhausted'},
     'confirmation': {'confirm_question', 'after_recorded_say', 'create_promise_max_tries', 'on_create_failed',
                      'acknowledgement_scope', 'after_recorded_say_after_each_record'},
-    'multi_product': {'note_tool', 'note_reasons', 'create_promise_failure'},
+    'multi_product': {'note_tool', 'note_reasons', 'create_promise_failure', 'dispute_or_paid_continues'},
     'closing': {'outcomes'},
     'calendar': {'business_days', 'holidays', 'week_start'},
 }

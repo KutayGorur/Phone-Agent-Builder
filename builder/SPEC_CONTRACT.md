@@ -107,6 +107,7 @@ Rules for the spec:
     "never_ask_customer_for_amount": true,
     "floor_field_by_product": {"credit_card": "minimum_payment",
                                "personal_loan": "instalment_amount", "car_loan": "instalment_amount"},
+    "floor_formula_by_product": {"overdraft": {"field": "arrears", "percent_of_field": 25}},   // floor computed from a product field (no floor figure on the account)
     "floor_offers": 1,
     "floor_note": "say the rest stays overdue",
     "accept_range": "floor <= amount <= past_due",
