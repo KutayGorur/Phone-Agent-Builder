@@ -1,8 +1,8 @@
-# Task: write new practice bank briefs (paste this whole message)
+# Task: write new practice bank briefs
 
 You are helping a hackathon team. We build a program that reads a bank's brief and builds a phone agent. We practise on invented briefs so our builder is not tuned to the real ones. You have no repo access; use only the attached files.
 
-**Attach before sending:** `briefs/brief-a.md`, `briefs/brief-b.md` (the base briefs), `test-briefs/brief-d.md` (a long memo-style variant) and `test-briefs/brief-e.md` (a short change list on top of A+B), `test-briefs/cases-e.json` (case format), `test-briefs/tools-e.openapi.json` (tool API format).
+**Files already in this project folder (read them from disk, paths as written):** `briefs/brief-a.md`, `briefs/brief-b.md` (the base briefs), `test-briefs/brief-d.md` (a long memo-style variant) and `test-briefs/brief-e.md` (a short change list on top of A+B), `test-briefs/cases-e.json` (case format), `test-briefs/tools-e.openapi.json` (tool API format).
 
 ## Rules
 - Fictional bank, synthetic data. **No Freya API key, no real data, nothing copied from any hidden or official final brief.** Invent every number and date yourself.
@@ -23,3 +23,6 @@ For each X in f, g, h:
 - `briefs/README-x.md`: five lines: what is varied, which rules are the traps.
 
 Keep every file compact. If the answer is too long for one message, send F first and wait for me to say "continue" for G and H.
+
+## Where to write
+Write every output file under `output/` in this folder (never overwrite the input files). In task 1 the output paths above are relative to `output/`, e.g. `output/briefs/brief-f.md`. If you cannot write files, give each file in a code block labelled with its path.

@@ -1,14 +1,12 @@
-# External handoffs: which file goes with which attachments
+# External handoffs
 
-Paste the whole handoff file as the first message. Attach the files listed in its "Attach" section. Save the answer into `external/<agent-name>/` as the handoff says (agent-name = `gemini` or `chatgpt`).
+One folder per task. For each: open the folder as the agent's project folder, then give it the file `PROMPT.md` (paste it or point to it). Everything the agent needs is inside the folder; nothing to attach. The agent writes its results to `output/` (or you paste its answer into a file there), then copy the result into `external/<agent-name>/`.
 
-All paths are relative to the repo folder `build-the-builder-v3/build-the-builder/`.
+| Folder | Task |
+|---|---|
+| `task-1-practice-briefs/` | 3 new practice briefs with cases and tool API |
+| `task-2-customer-scripts/` | harder customer scripts per practice case |
+| `task-3-spec-review/` | review of the parsed spec vs Briefs A and B |
+| `task-4-readme-judges/` | draft README section for judges |
 
-| File | Task | Attach | Result goes to |
-|---|---|---|---|
-| `01-practice-briefs.md` | 2-3 new practice briefs + cases + tool API | `briefs/brief-a.md`, `briefs/brief-b.md`, `test-briefs/brief-d.md`, `test-briefs/brief-e.md`, `test-briefs/cases-e.json`, `test-briefs/tools-e.openapi.json` | `external/<agent>/briefs/` |
-| `02-customer-scripts.md` | Difficult customer scripts per practice case | `public-test-set.json`, `briefs/brief-a.md`, `briefs/brief-b.md` (optional second pass: `test-briefs/cases-c.json`, `cases-d.json`, `cases-e.json`) | `external/<agent>/scripts/` |
-| `03-spec-review.md` | Review of the parsed spec vs Briefs A and B | `briefs/brief-a.md`, `briefs/brief-b.md`, `builder/specs/brief-ab.spec.json`, `builder/SPEC_CONTRACT.md` | `external/<agent>/review.md` |
-| `04-readme-judges.md` | Draft README section for judges | `README.md`, `TEST_PLAN.md`, `builder/SPEC_CONTRACT.md`, `HANDOFF-planning.md`, `builder/HANDOFF-build.md`, `builder/generate/HANDOFF.md` | `external/<agent>/README-judges.md` |
-
-Never attach `env.sh`, `apikey.txt`, `.freya-agents.json`, `results/` or `traces/`.
+Folders contain copies of repo files only (no env.sh, keys, traces).

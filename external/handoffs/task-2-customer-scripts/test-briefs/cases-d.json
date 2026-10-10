@@ -1,0 +1,627 @@
+[
+ {
+  "id": "TD-01",
+  "brief": "D",
+  "family": "Multi-product",
+  "level": "medium",
+  "title": "Three products, one date inside every deadline",
+  "variables": {
+   "first_name": "Sofia",
+   "last_name": "Meier",
+   "title": "Ms",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2011",
+   "date_of_birth": "1987-06-03"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "2288",
+    "arrears": 300.0,
+    "days_past_due": 5,
+    "minimum_payment": 90.0
+   },
+   {
+    "type": "consumer_loan",
+    "arrears": 800.0,
+    "days_past_due": 12,
+    "monthly_instalment": 270.0
+   },
+   {
+    "type": "overdraft",
+    "arrears": 400.0,
+    "days_past_due": 30
+   }
+  ],
+  "script": "Verified. Cannot pay everything today. Agrees to pay all three in full on Wednesday 25 November. Confirms once.",
+  "expected": {
+   "outcome": "PTP",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 300.0,
+     "date": "2026-11-25"
+    },
+    {
+     "product_id": "p2",
+     "amount": 800.0,
+     "date": "2026-11-25"
+    },
+    {
+     "product_id": "p3",
+     "amount": 400.0,
+     "date": "2026-11-25"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "all three products stated before any ask",
+   "the word 'debt' and the word 'collections' are never said",
+   "one read-back and one confirmation for all three",
+   "one create_promise per product",
+   "the post and email sentence is said after the promises"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-02",
+  "brief": "D",
+  "family": "Multi-product",
+  "level": "hard",
+  "title": "One date for all, two deadlines are earlier",
+  "variables": {
+   "first_name": "Lukas",
+   "last_name": "Frei",
+   "title": "Mr",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2008",
+   "date_of_birth": "1982-03-21"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "4410",
+    "arrears": 300.0,
+    "days_past_due": 5,
+    "minimum_payment": 90.0
+   },
+   {
+    "type": "consumer_loan",
+    "arrears": 800.0,
+    "days_past_due": 12,
+    "monthly_instalment": 270.0
+   },
+   {
+    "type": "overdraft",
+    "arrears": 400.0,
+    "days_past_due": 30
+   }
+  ],
+  "script": "Verified. Cannot pay today. Wants to pay everything in full on 1 December. Accepts when told two products have an earlier latest date.",
+  "expected": {
+   "outcome": "PTP",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 300.0,
+     "date": "2026-12-01"
+    },
+    {
+     "product_id": "p2",
+     "amount": 800.0,
+     "date": "2026-11-26"
+    },
+    {
+     "product_id": "p3",
+     "amount": 400.0,
+     "date": "2026-11-26"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "the card (early band, deadline 3 December) is recorded on 1 December",
+   "the loan and the overdraft (10 to 60 days, deadline 26 November) are recorded on 26 November",
+   "the read-back names the changed dates"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-03",
+  "brief": "D",
+  "family": "Amounts",
+  "level": "hard",
+  "title": "Overdraft floor is 25 percent",
+  "variables": {
+   "first_name": "Nina",
+   "last_name": "Roth",
+   "title": "Ms",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2015",
+   "date_of_birth": "1986-05-17"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "1903",
+    "arrears": 300.0,
+    "days_past_due": 3,
+    "minimum_payment": 90.0
+   },
+   {
+    "type": "overdraft",
+    "arrears": 480.0,
+    "days_past_due": 20
+   }
+  ],
+  "script": "Verified. Says she can pay the card in full today but not the overdraft. For the overdraft says the full amount is too much and accepts the minimum, on Tuesday next week.",
+  "expected": {
+   "outcome": "PTP",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 300.0,
+     "date": "2026-11-18"
+    },
+    {
+     "product_id": "p2",
+     "amount": 120.0,
+     "date": "2026-11-24"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "the agent works out the overdraft floor as 120.00 (25 percent of 480.00)",
+   "the agent never asks how much she can pay",
+   "promises: card 300.00 today, overdraft 120.00 on 24 November"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-04",
+  "brief": "D",
+  "family": "Multi-product",
+  "level": "hard",
+  "title": "Disputes one loan, pays the card",
+  "variables": {
+   "first_name": "Pascal",
+   "last_name": "Gerber",
+   "title": "Mr",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2004",
+   "date_of_birth": "1975-10-08"
+  },
+  "products": [
+   {
+    "type": "consumer_loan",
+    "arrears": 900.0,
+    "days_past_due": 14,
+    "monthly_instalment": 300.0
+   },
+   {
+    "type": "credit_card",
+    "card_last4": "7740",
+    "arrears": 250.0,
+    "days_past_due": 6,
+    "minimum_payment": 75.0
+   }
+  ],
+  "script": "Verified. Says he never took out the loan. Does not argue. Agrees to pay the card in full this Friday.",
+  "expected": {
+   "outcome": "PTP",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p2",
+     "amount": 250.0,
+     "date": "2026-11-20"
+    }
+   ],
+   "notes": [
+    {
+     "product_id": "p1",
+     "reason": "DISPUTE"
+    }
+   ],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "the dispute on the loan does not end the call",
+   "note DISPUTE for p1 only",
+   "promise for the card on Friday 20 November",
+   "no promise offered for the loan"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-05",
+  "brief": "D",
+  "family": "Persuasion",
+  "level": "hard",
+  "title": "Refuses both products",
+  "variables": {
+   "first_name": "Rita",
+   "last_name": "Baumann",
+   "title": "Ms",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2012",
+   "date_of_birth": "1990-12-01"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "9063",
+    "arrears": 500.0,
+    "days_past_due": 8,
+    "minimum_payment": 150.0
+   },
+   {
+    "type": "overdraft",
+    "arrears": 800.0,
+    "days_past_due": 25
+   }
+  ],
+  "script": "Verified. Says no to everything for both products. Says she cannot and will not pay anything this month. Names no date and no amount. Does not mention hardship or a dispute.",
+  "expected": {
+   "outcome": "NOPTP",
+   "reason": "REFUSED",
+   "promises": [],
+   "notes": [
+    {
+     "product_id": "p1",
+     "reason": "REFUSED"
+    },
+    {
+     "product_id": "p2",
+     "reason": "REFUSED"
+    }
+   ],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "early product gets one attempt (full amount on the last working day of the week, Friday 20 November)",
+   "late product gets two attempts, the second one the floor 200.00 on the deadline",
+   "no offer is repeated",
+   "note REFUSED for each product",
+   "close NOPTP / REFUSED"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-06",
+  "brief": "D",
+  "family": "Third party",
+  "level": "easy",
+  "title": "Wrong number",
+  "variables": {
+   "first_name": "Beat",
+   "last_name": "Keller",
+   "title": "Mr",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2010",
+   "date_of_birth": "1978-09-09"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "3321",
+    "arrears": 220.0,
+    "days_past_due": 4,
+    "minimum_payment": 66.0
+   }
+  ],
+  "script": "The person who answers says Beat Keller does not live here and this is not his number.",
+  "expected": {
+   "outcome": "NOREACH",
+   "reason": "WRONGNO",
+   "promises": [],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "the agent says nothing about the reason for the call",
+   "verify_identity and get_account never called"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-07",
+  "brief": "D",
+  "family": "Third party",
+  "level": "hard",
+  "title": "Callback at 09:30, the memo's window",
+  "variables": {
+   "first_name": "Erika",
+   "last_name": "Vogel",
+   "title": "Ms",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2014",
+   "date_of_birth": "1984-07-14"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "5512",
+    "arrears": 410.0,
+    "days_past_due": 7,
+    "minimum_payment": 123.0
+   }
+  ],
+  "script": "The person who answers is her husband. Says she can be called back today at half past six in the evening. When asked for another time says tomorrow at half past nine in the morning.",
+  "expected": {
+   "outcome": "NOREACH",
+   "reason": "CALLBK",
+   "promises": [],
+   "notes": [],
+   "callbacks": [
+    {
+     "date": "2026-11-19",
+     "time": "09:30"
+    }
+   ],
+   "transfers": []
+  },
+  "checks": [
+   "18:30 is refused as outside the window and another time is asked once",
+   "09:30 is accepted (window starts at 09:30 after the memo)",
+   "callback booked for 19 November at 09:30"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-08",
+  "brief": "D",
+  "family": "Dates",
+  "level": "hard",
+  "title": "'Next Friday' is after the deadline",
+  "variables": {
+   "first_name": "Thomas",
+   "last_name": "Egger",
+   "title": "Mr",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2009",
+   "date_of_birth": "1975-11-07"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "6618",
+    "arrears": 640.0,
+    "days_past_due": 22,
+    "minimum_payment": 160.0
+   }
+  ],
+  "script": "Confirms the name. Gives the account opening year, then the date of birth in digits only: 07/11/1975. Cannot pay today. Wants to pay the full amount next Friday. Accepts the latest possible date when told.",
+  "expected": {
+   "outcome": "PTP",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 640.0,
+     "date": "2026-11-26"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "the date of birth is sent as 1975-11-07 (day first)",
+   "'next Friday' is 27 November, one day after the deadline of 26 November",
+   "the agent offers 26 November and says it is the latest date",
+   "promise 640.00 on 26 November"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-09",
+  "brief": "D",
+  "family": "Tool failure",
+  "level": "hard",
+  "title": "Recording the first promise fails twice",
+  "variables": {
+   "first_name": "Anja",
+   "last_name": "Huber",
+   "title": "Ms",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2013",
+   "date_of_birth": "1989-02-23"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "7741",
+    "arrears": 200.0,
+    "days_past_due": 4,
+    "minimum_payment": 60.0
+   },
+   {
+    "type": "consumer_loan",
+    "arrears": 600.0,
+    "days_past_due": 16,
+    "monthly_instalment": 200.0
+   }
+  ],
+  "script": "Verified. Cannot pay today. Agrees to pay both in full tomorrow and confirms.",
+  "expected": {
+   "outcome": "PTP",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p2",
+     "amount": 600.0,
+     "date": "2026-11-19"
+    }
+   ],
+   "notes": [
+    {
+     "product_id": "p1",
+     "reason": "SVCERR"
+    }
+   ],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "the agent tries the failed promise once more",
+   "the agent does not say it is recorded for the card",
+   "note SVCERR for p1",
+   "the agent tells the customer the card promise could not be recorded and the loan promise was"
+  ],
+  "faults": [
+   {
+    "tool": "create_promise",
+    "fail_first_n": 2
+   }
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-10",
+  "brief": "D",
+  "family": "Restructuring",
+  "level": "medium",
+  "title": "Asks for a payment holiday",
+  "variables": {
+   "first_name": "Marco",
+   "last_name": "Studer",
+   "title": "Mr",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2007",
+   "date_of_birth": "1981-04-30"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "8830",
+    "arrears": 350.0,
+    "days_past_due": 10,
+    "minimum_payment": 105.0
+   }
+  ],
+  "script": "Verified. Asks whether he can have a payment holiday for three months because money is tight. Does not name a date or an amount.",
+  "expected": {
+   "outcome": "XFER",
+   "reason": "RESTR",
+   "promises": [],
+   "notes": [],
+   "callbacks": [],
+   "transfers": [
+    {
+     "queue": "Q_RESTR"
+    }
+   ]
+  },
+  "checks": [
+   "no plan or holiday is described or promised",
+   "transfer to Q_RESTR",
+   "no notes at all",
+   "close XFER / RESTR"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ },
+ {
+  "id": "TD-11",
+  "brief": "D",
+  "family": "Opening",
+  "level": "medium",
+  "title": "'Speaking' alone is not an acknowledgement",
+  "variables": {
+   "first_name": "Laura",
+   "last_name": "Zimmermann",
+   "title": "Ms",
+   "now": "2026-11-18T09:40"
+  },
+  "identity": {
+   "account_open_year": "2016",
+   "date_of_birth": "1992-08-25"
+  },
+  "products": [
+   {
+    "type": "credit_card",
+    "card_last4": "2147",
+    "arrears": 180.0,
+    "days_past_due": 3,
+    "minimum_payment": 54.0
+   }
+  ],
+  "script": "Answers the phone with 'Speaking.' to the first question. When asked again says 'Yes, that's me.' Then verified. Pays the full amount today and confirms.",
+  "expected": {
+   "outcome": "PTP",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 180.0,
+     "date": "2026-11-18"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "the agent asks the identity-confirmation question a second time after 'Speaking.'",
+   "no security question is asked before the second answer",
+   "promise 180.00 today"
+  ],
+  "bank": {
+   "max_wrong": 3
+  }
+ }
+]

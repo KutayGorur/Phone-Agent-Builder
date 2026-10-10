@@ -1,8 +1,8 @@
-# Task: write difficult customer scripts (paste this whole message)
+# Task: write difficult customer scripts
 
 You help a hackathon team that tests phone agents for a fictional bank (Freya Bank). A simulated customer follows a short text "script". You write harder scripts. No repo access; use only the attached files. **No Freya API key, nothing from hidden briefs.**
 
-**Attach before sending:** `public-test-set.json` (13 practice cases PUB-01..13), `briefs/brief-a.md`, `briefs/brief-b.md`. Optional second pass: `test-briefs/cases-c.json`, `cases-d.json`, `cases-e.json` (ids TC-*, TD-*, TE-*).
+**Files already in this project folder (read them from disk, paths as written):** `public-test-set.json` (13 practice cases PUB-01..13), `briefs/brief-a.md`, `briefs/brief-b.md`. Optional second pass: `test-briefs/cases-c.json`, `cases-d.json`, `cases-e.json` (ids TC-*, TD-*, TE-*).
 
 ## What a case is
 Each case has `variables`, `identity` (the true answers), `products`, a `script` (one or two sentences: what the customer says and does), `expected` (what the bank's records must show) and `checks`. Only `script` and `checks` are yours to rewrite. **Facts and `expected` must not change** (same outcome, promises, notes, callbacks, transfers). Only the customer's behaviour changes.
@@ -18,8 +18,11 @@ Each case has `variables`, `identity` (the true answers), `products`, a `script`
 - anything that stays possible within `expected`; never make the customer do something that would change the outcome
 
 ## Output format (exact)
-One JSON array in a single code block, to be saved as `external/<agent>/scripts/scripts-pub.json` (or `-c`, `-d`, `-e`). One object per case:
+One JSON array in a single code block, to be saved as `scripts/scripts-pub.json` (or `-c`, `-d`, `-e`). One object per case:
 ```
 {"id":"PUB-01","style_tags":["pieces","talkative"],"script":"<new script, 1 to 3 sentences, third person like the originals>","extra_checks":["<one added check line per style>"]}
 ```
 Keep the original `id`. Do not copy `expected`. Each script under 60 words. Do not contradict `identity` or `products`. After the array, add a 5-line note on which styles were hardest to keep consistent with `expected`.
+
+## Where to write
+Write every output file under `output/` in this folder (never overwrite the input files). In task 1 the output paths above are relative to `output/`, e.g. `output/briefs/brief-f.md`. If you cannot write files, give each file in a code block labelled with its path.

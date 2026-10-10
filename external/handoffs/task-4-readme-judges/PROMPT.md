@@ -1,8 +1,8 @@
-# Task: draft the judges' README section (paste this whole message)
+# Task: draft the judges' README section
 
 A hackathon team ("Build the Builder") wrote a program that reads a bank's brief and builds a phone agent on the Freya platform. Judges read our repo README. You draft a section explaining our approach honestly. No repo access; use only the attachments. **No Freya API key, no secrets; claim nothing the files do not support.**
 
-**Attach before sending:** `README.md` (kit README; our builder is described in its last section "Our builder"), `TEST_PLAN.md`, `builder/SPEC_CONTRACT.md`, `HANDOFF-planning.md`, `builder/HANDOFF-build.md`, `builder/generate/HANDOFF.md`.
+**Files already in this project folder (read them from disk, paths as written):** `README.md` (kit README; our builder is described in its last section "Our builder"), `TEST_PLAN.md`, `builder/SPEC_CONTRACT.md`, `HANDOFF-planning.md`, `builder/HANDOFF-build.md`, `builder/generate/HANDOFF.md`.
 
 ## Event constraints (the text must not contradict them)
 - The builder takes everything from the brief; nothing from the final briefs is written into code or prompts.
@@ -19,4 +19,7 @@ A hackathon team ("Build the Builder") wrote a program that reads a bank's brief
 7. **How to run**: the exact commands from README "Our builder".
 
 ## Output format (exact)
-One Markdown file, to be saved as `external/<agent>/README-judges.md`, starting with `## Our approach` and no other top-level heading. End with a list "Claims to verify" for every statement you could not confirm from the attachments.
+One Markdown file, to be saved as `README-judges.md`, starting with `## Our approach` and no other top-level heading. End with a list "Claims to verify" for every statement you could not confirm from the attachments.
+
+## Where to write
+Write every output file under `output/` in this folder (never overwrite the input files). In task 1 the output paths above are relative to `output/`, e.g. `output/briefs/brief-f.md`. If you cannot write files, give each file in a code block labelled with its path.
