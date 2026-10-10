@@ -246,7 +246,7 @@ def generate(spec):
 
     # ---- init / to_tp
     ivars = ['say_text', 'x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time', 'idv_note',
-             'instruction', 'route', 'bye_text', 'close_outcome', 'cp_ok', 'nt_ok', 'cb_ok', 'tr_queue', 'tr_text', 'st']
+             'instruction', 'route', 'bye_text', 'close_outcome', 'cp_ok', 'nt_ok', 'cb_ok', 'tr_ok', 'tr_queue', 'tr_text', 'st']
     ivars += ['idq%d_state' % (i + 1) for i in range(n)]
     enum_init = 'vars["x_intent"] = "none"\nvars["x_stance"] = "other"\nvars["tp_event"] = "other"\nvars["x_q"] = "no"\n'
     nodes['init'] = code_node('init', enum_init + ''.join('vars[%s] = \'\'\n' % lit(v) for v in ivars), [tr('idq_1' if n else 'get_account')])
@@ -300,7 +300,18 @@ def generate(spec):
     routes = ['say_main', 'create', 'note', 'transfer', 'callback', 'tp_say', 'fin']
     target = {'say': 'say_fixed', 'ask': 'say_main', 'create': 'do_create_promise', 'note': 'do_add_note', 'transfer': 'do_transfer', 'callback': 'do_callback',
               'tp_say': 'tp_say', 'fin': 'do_close'}
-    et = [tr(t, 'route', 'equals', r) for r, t in target.items()]
+    pend = {'create': 'cp_ok', 'note': 'nt_ok', 'callback': 'cb_ok', 'transfer': 'tr_ok'}
+
+    def guarded(r, t):
+        # an API node is entered again only while its own result variable still says 'pending': if the engine run
+        # failed (sandbox hiccup) after the call, the stale route cannot repeat the call.
+        if r not in pend:
+            return tr(t, 'route', 'equals', r)
+        return {'target_node': t, 'description': 'route %s and %s pending' % (r, pend[r]),
+                'condition': {'logic': 'or', 'conditions': [{'logic': 'and', 'conditions': [
+                    {'variable': 'route', 'operator': 'equals', 'operand': r},
+                    {'variable': pend[r], 'operator': 'equals', 'operand': 'pending'}]}]}}
+    et = [guarded(r, t) for r, t in target.items()]
     for i in range(1, n + 1):
         et.append(tr('idq_%d' % i, 'route', 'equals', 'idq_%d' % i))
     et.append(tr('say_main'))
@@ -341,7 +352,7 @@ def generate(spec):
     nodes['do_add_note'] = api_node('do_add_note', 'add_note', {'product_id': ('string', '{{nt_pid}}'), 'reason': ('string', '{{nt_reason}}')},
                                     'engine', mapping=[{'path': 'data.ok', 'variable': 'nt_ok'}])
     nodes['do_transfer'] = api_node('do_transfer', 'transfer_to_agent', {'queue': ('string', '{{tr_queue}}')}, 'engine',
-                                    on_enter={'type': 'tts', 'text': '{{tr_text}}'})
+                                    mapping=[{'path': 'data.ok', 'variable': 'tr_ok'}], on_enter={'type': 'tts', 'text': '{{tr_text}}'})
     nodes['do_callback'] = api_node('do_callback', 'schedule_callback', {'date': ('string', '{{cb_date}}'), 'time': ('string', '{{cb_time}}')}, 'engine',
                                     mapping=[{'path': 'data.ok', 'variable': 'cb_ok'}])
     nodes['do_close'] = api_node('do_close', 'close_call', {'outcome': ('string', '{{close_outcome}}'), 'reason': ('string', '{{close_reason}}')}, 'hangup',

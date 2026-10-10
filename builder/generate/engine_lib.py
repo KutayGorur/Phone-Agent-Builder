@@ -762,6 +762,7 @@ def do_transfer(st, queue, outcome, reason, text=''):
     st['transfer'] = {'queue': queue, 'outcome': outcome, 'reason': reason}
     vars['tr_queue'] = queue
     vars['tr_text'] = text or 'I am transferring you now.'
+    vars['tr_ok'] = 'pending'
     st['phase'] = 'transfer'
     route('transfer')
 
