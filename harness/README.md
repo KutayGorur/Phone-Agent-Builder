@@ -41,9 +41,9 @@ flaky and never-passing customers, a table per customer, and the failure reasons
 
 ## Pre-flight before any simulation (Freya credits are limited)
 
-Order of checks, cheapest first. Only the last one spends credits.
+The one procedure is the gate table in `TEST_PLAN.md`. This is where the harness tools fit in:
 
-1. `python harness/preflight.py <workflow.json> <tools.openapi.json>`: static check of the generated workflow against the brief's tool API file (URLs, body fields, enum values, stale names from another brief, enum values the workflow never mentions). Under a second, exit code 1 on errors. Try it on `examples/base-agent.json` against `tools/openapi.json` (0 errors) and against `test-briefs/tools-c.openapi.json` (flags the stale names).
-2. `python harness/mock_bank.py --selftest`: checks the case files and the scorer agree.
-3. In-process bank for local engine tests (no HTTP, no tunnel): `from harness.mock_bank import Bank; bank = Bank(api_dict, cases); cid = bank.new_session("TC-01")["variables"]["customer_id"]; status, result = bank.tool("verify_identity", {"customer_id": cid, ...})`, then `score_ledger(case, bank.ledger(cid))` from `tools/score.py`. A local driver (for example `builder/generate/local_sim.py`) can call the tools through it and score the result against `cases-*.json`.
-4. Only then a real `run_cases.py` simulation, one case first (`--only TC-01`), then the set.
+1. Gate 0/1, free: `python harness/mock_bank.py --selftest` (case files and scorer agree), then the local engine sim. The engine can call the tools through the in-process bank: `from harness.mock_bank import Bank; bank = Bank(api_dict, cases); cid = bank.new_session("TC-01")["variables"]["customer_id"]; status, result = bank.tool("verify_identity", {"customer_id": cid, ...})`, then `score_ledger(case, bank.ledger(cid))` from `tools/score.py`.
+2. Free, before lint: `python harness/preflight.py <workflow.json> <tools.openapi.json>` checks the workflow against the brief's tool API file (URLs, body fields, enum values, stale names from another brief, enum values never mentioned). Exit code 1 on errors. Try it on `examples/base-agent.json` against `tools/openapi.json` (0 errors) and against `test-briefs/tools-c.openapi.json` (flags stale names).
+3. Gate 2, free: `python ci/lint_workflow.py out/<slot>.workflow.json --dry-run`.
+4. Gate 4 to 6, spends credits, only through `python ci/sim.py <agent_id> --workflow <file> --brief X --only <ids> --why "<reason>"`. Variant briefs C/D/E need the stand-in bank behind a tunnel (above), at gate 5 and only once A and B are stable.
