@@ -9,7 +9,9 @@ Nothing here is specific to any brief: it only looks at markdown structure.
 import pathlib
 import re
 
-NUM_RE = re.compile(r"^\s{0,3}(\d+)[.)]\s+(.*)$")
+NUM_RE = re.compile(r"^\s{0,3}(?:(\d+(?:\.\d+)+)[.)]?|(\d+)[.)])\s+(.*)$")   # "12. text", "9.4 text"
+ITEM_RE = re.compile(r"^(?:\(?([a-zA-Z])[).]|[-*•])\s+(.*)$")      # "a) text", "- text" at the left margin
+RULER_RE = re.compile(r"^\s*([-_=*]\s*){3,}$")                    # "-----", "====": a separator, not a unit
 
 
 def file_tag(path):
@@ -23,7 +25,7 @@ def split_units(text, tag=None):
     prefix = f"{tag}:" if tag else ""
     units, section = [], ""
     cur = None            # unit being built
-    counters = {"p": 0, "t": 0}
+    counters = {"p": 0, "t": 0, "i": 0, "parent": None}
 
     def flush():
         nonlocal cur
@@ -45,6 +47,10 @@ def split_units(text, tag=None):
             flush()
             section = stripped.lstrip("#").strip()
             continue
+        if RULER_RE.match(line) and not stripped.startswith("|"):
+            if cur and cur["kind"] != "rule":
+                flush()
+            continue
         if not stripped:
             if cur and cur["kind"] != "rule":
                 flush()
@@ -53,7 +59,7 @@ def split_units(text, tag=None):
             continue
         m = NUM_RE.match(line)
         if m and not line.startswith("    "):
-            start("rule", m.group(1), line.strip())
+            start("rule", m.group(1) or m.group(2), line.strip())
             continue
         if stripped.startswith("|"):
             if cur and cur["kind"] == "table":
@@ -62,6 +68,14 @@ def split_units(text, tag=None):
                 counters["t"] += 1
                 start("table", f"t{counters['t']}", stripped)
             continue
+        mi = ITEM_RE.match(line) if not line.startswith((" ", "	")) else None
+        if mi and not (cur and cur["kind"] == "rule" and cur["lines"] and cur["lines"][-1] != ""):
+            parent = f"p{counters['p']}"
+            counters["i"] = counters["i"] + 1 if counters.get("parent") == parent else 1
+            counters["parent"] = parent
+            label = mi.group(1) or str(counters["i"])
+            start("item", f"{parent}.{label}", stripped)
+            continue
         if cur and cur["kind"] == "rule":
             # continuation / nested bullet of a rule, unless it is a flush-left paragraph after a blank line
             if cur["lines"] and cur["lines"][-1] == "" and not line.startswith((" ", "\t")):
@@ -69,7 +83,7 @@ def split_units(text, tag=None):
             else:
                 cur["lines"].append(line.rstrip())
                 continue
-        if cur and cur["kind"] == "paragraph":
+        if cur and cur["kind"] in ("paragraph", "item"):
             cur["lines"].append(stripped)
             continue
         counters["p"] += 1
