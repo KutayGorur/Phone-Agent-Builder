@@ -88,5 +88,28 @@ class Sign(unittest.TestCase):
         self.assertEqual(ns['amount_check']('₺150'), ('ok', 150.0))
 
 
+class Smoke(unittest.TestCase):
+    def test_gap08_syntax_error_without_braces_is_caught(self):
+        from builder.generate.generate import check_code
+        with self.assertRaises(SyntaxError):
+            check_code('x = (1 + 2 +', 'snippet')
+        check_code('x = 1', 'snippet')
+
+    def test_gap08_broken_engine_fails_the_smoke_check(self):
+        from builder.generate.generate import smoke_engine
+        with self.assertRaises(Exception):
+            smoke_engine('raise RuntimeError("boom")')
+        with self.assertRaises(ValueError):
+            smoke_engine('vars["engine_err"] = "x"')
+        with self.assertRaises(ValueError):
+            smoke_engine('pass')
+
+    def test_gap08_shipped_specs_pass(self):
+        import glob
+        from builder.generate.generate import generate
+        for f in glob.glob(os.path.join(ROOT, 'builder', 'specs', '*.json')):
+            generate(json.load(open(f, encoding='utf-8')))
+
+
 if __name__ == '__main__':
     unittest.main()

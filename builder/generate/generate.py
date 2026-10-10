@@ -41,7 +41,19 @@ def check_code(code, what):
     if '{{' in code or '}}' in code:
         i = code.find('{{') if '{{' in code else code.find('}}')
         raise ValueError('double brace in code of %s near %r' % (what, code[max(0, i - 40):i + 40]))
+    compile(code, what, 'exec')                    # a syntax error is found here, not by the platform at call time
     return code
+
+
+def smoke_engine(code):
+    """Run the engine once on an empty account (no products): it must finish without an exception, set a route and, with
+    no account data, close with the spec's own service-error close. Pure Python, no model, no network."""
+    v = {'now': '2026-10-14T11:00', 'st': ''}
+    exec(compile(code, 'engine', 'exec'), {'vars': v})
+    if v.get('engine_err'):
+        raise ValueError('engine smoke check failed: ' + str(v['engine_err']))
+    if not v.get('route'):
+        raise ValueError('engine smoke check failed: no route set on an empty account')
 
 
 def engine_code(E):
@@ -369,7 +381,9 @@ def generate(spec):
     for i in range(1, n + 1):
         et.append(tr('idq_%d' % i, 'route', 'equals', 'idq_%d' % i))
     et.append(tr('say_main'))
-    nodes['engine'] = code_node('engine', engine_code(E), et)
+    ecode = engine_code(E)
+    smoke_engine(ecode)
+    nodes['engine'] = code_node('engine', ecode, et)
 
     # ---- speaking node after verification
     ids = ['agree', 'refuse', 'too_much', 'offer', 'evasive', 'question', 'none'] + list(E['intents'].keys())
