@@ -19,6 +19,6 @@ Status values: free / claimed / in-progress / blocked / done. Times are UTC. Edi
 | 11 spec compiler fixes (ACC-05,11,14,15,21,27) | tasks/11-compiler-fixes.md | no | `ecfg.py`, `generate.py` | none | claude-kutay-11 | done (pushed to main; engine side of tokens, max_tries, ack_scope waits on task 10) | 2026-10-10T18:45Z | main | 2026-10-10T19:10Z |
 | 12 honest build status + hard deadline (ACC-07,16) | tasks/12-build-readiness-and-deadline.md | no | no (`build.py` only) | none | claude-kutay-12 | done (pushed to main) | 2026-10-10T18:45Z | main | 2026-10-10T18:58Z |
 | 13 parser robustness, H empty sections (ACC-08) | tasks/13-parser-robustness.md | no (LLM parse calls) | no (`builder/parse/` only) | none | claude-parser | done (pushed to main; H spec saved) | 2026-10-10T18:45Z | main | 2026-10-10T19:30Z |
-| 14 fix-verification claims R1-R12 (verdicts + fixes) | team/comms/fix-verification-verdicts.md | no | engine_lib.py, generate.py, ecfg.py (small, sequential) | none | claude-fixverify | in-progress | 2026-10-10T19:45Z | main | 2026-10-10T19:45Z |
+| 14 fix-verification claims R1-R12 (verdicts + fixes) | team/comms/fix-verification-verdicts.md | no | engine_lib.py, generate.py, ecfg.py (small, sequential) | none | claude-fixverify | done (pushed to main) | 2026-10-10T19:45Z | main | 2026-10-10T21:00Z |
 
 Merge order for generator work: 06 -> 07 -> (01/02/03/04 fixes, small PRs). Anyone needing a generator change outside their task puts a request in the owner's inbox.
