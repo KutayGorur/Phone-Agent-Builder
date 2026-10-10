@@ -987,8 +987,9 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
     if it in ('offer', 'change'):
         st['hard_pending'] = False
         return False
-    if it in ('question', 'none'):
-        reask(st)
+    if it in ('question', 'none') and not st.get('hard_reasked'):
+        st['hard_reasked'] = True                 # the transfer is offered once: a question is answered without repeating it,
+        reask(st, then=(it == 'none'))            # and a second non-answer ("no, but can you...") counts as declining
         return True
     dec = I.get('on_decline') or {}
     st['hard_pending'] = False
