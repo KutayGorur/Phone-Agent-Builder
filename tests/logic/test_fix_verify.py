@@ -106,5 +106,51 @@ class R3Confirmation(unittest.TestCase):
         self.assertEqual((p.prod(0)['amt'], p.prod(0)['date']), (200.0, '2026-10-15'))
 
 
+class R5R6History(unittest.TestCase):
+    def test_r5_refused_counter_offer_is_not_offered_again(self):
+        late = dict(PERSONAL, past_due='500.0', days_late='10', instalment_amount='100.0')
+        p = Probe(products=(late,))
+        p.say('offer', date='23 October', amount='50')
+        self.assertEqual((p.prod(0)['pend']['a'], p.prod(0)['pend']['d']), (100.0, '2026-10-23'))
+        p.say('refuse')
+        self.assertEqual(p.prod(0)['pend']['a'], 500.0)
+        p.say('refuse')                                                 # attempt 2 would be the refused 100 on 23 Oct
+        self.assertEqual(p.v['route'], 'note')
+        self.assertEqual(p.prod(0)['status'], 'noted')
+
+    def test_r6_hardship_with_shared_date_keeps_all_products_and_stops_persuasion(self):
+        p = Probe()
+        p.say('sp_hardship', date='tomorrow', product='all')
+        p.say('refuse')                                                 # no thanks to the support team
+        self.assertEqual([x['status'] for x in p.st['prods']], ['agreed', 'agreed'])
+        self.assertEqual([x['date'] for x in p.st['prods']], ['2026-10-15', '2026-10-15'])
+        self.assertEqual(p.st['phase'], 'confirm')
+
+    def test_r6_one_named_product_then_no_persuasion_on_the_other(self):
+        p = Probe()
+        p.say('sp_hardship', date='tomorrow', amount='300', product='car loan')
+        p.say('refuse')
+        self.assertEqual(p.prod(1)['status'], 'agreed')
+        self.assertEqual(p.prod(0)['status'], 'noted')                  # not asked, noted with the hardship reason
+        self.assertEqual(p.prod(0)['note'], 'hardship')
+        self.assertEqual(p.st['phase'], 'confirm')
+
+    def test_r6_ambiguous_scope_asks_instead_of_defaulting(self):
+        p = Probe()
+        p.say('sp_hardship', date='tomorrow', amount='300', product='loan')
+        p.say('refuse')
+        self.assertIn('Which one', p.text)
+        self.assertEqual([x['status'] for x in p.st['prods']], ['open', 'open'])
+        p.say('offer', product='car loan')
+        self.assertEqual((p.prod(1)['amt'], p.prod(1)['date']), (300.0, '2026-10-15'))
+
+    def test_r6_hardship_without_offer_is_unchanged(self):
+        p = Probe()
+        p.say('sp_hardship')
+        p.say('refuse')
+        self.assertEqual(p.v['route'], 'note')
+        self.assertEqual([x['note'] for x in p.st['prods']], ['hardship', 'hardship'])
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -711,7 +711,15 @@ def refusal(st, p, lead='', start=False):
     """A flat refusal (or the start of a product in a multi-product call): make the next persuasion attempt.
     An amount and date pair already put to the customer is never offered again."""
     today = today_d()
+    if st.get('nopers'):                           # hardship: no persuasion on any product
+        note_product(p, st['nopers'])
+        return advance(st, lead)
     hist = p.setdefault('hist', [])
+    pe = p.get('pend')
+    if pe and pe.get('k') == 'adj' and pe.get('a') and pe.get('d'):       # a counter-offer the customer just turned down
+        pair = [round(pe['a'], 2), pe['d']]
+        if pair not in hist:
+            hist.append(pair)
     while True:
         if p['att'] >= p['am']:
             return exhaust(st, p, lead)
@@ -950,6 +958,7 @@ def special(st, it, pref):
             return True
         st['hard_pending'] = True
         st['hard'] += 1
+        st['nopers'] = (I.get('on_decline') or {}).get('reason') or E['exhausted']['reason']
         speak('I am sorry to hear that. ' + hardship_offer_text())
         return True
     return False
@@ -978,12 +987,8 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
     dec = I.get('on_decline') or {}
     st['hard_pending'] = False
     hs, st['hs'] = st.get('hs'), None
-    if hs:                                        # they offered a payment along with the hardship: that offer stands
-        kind, ts = target_products(st, hs.get('pref'))
-        p = ts[0] if kind in ('one', 'none') else st['prods'][st['cur']]
-        st['cur'] = p['i']
-        st['all'] = False
-        return offer(st, p, hs.get('dt'), hs.get('am'), 'I understand.') or True
+    if hs:                                        # they offered a payment along with the hardship: that offer stands,
+        return {'it': 'offer', 'dt': hs.get('dt') or '', 'am': hs.get('am') or '', 'pref': hs.get('pref') or ''}   # with its own scope
     reason = dec.get('reason') or E['exhausted']['reason']
     for p in st['prods']:
         if p['status'] in ('open',):
@@ -1042,7 +1047,10 @@ def turn_inner(st):
             dt, am, pref = hs.get('dt') or '', hs.get('am') or '', hs.get('pref') or pref
         if it in ('offer', 'change'):
             st['hs'] = None
-        if hardship_reply(st, it, dt, am, pref, scope_all):
+        r = hardship_reply(st, it, dt, am, pref, scope_all)
+        if isinstance(r, dict):
+            it, dt, am, pref = r['it'], r['dt'], r['am'], r['pref']
+        elif r:
             return
     if it == E['hard'] and (dt or am) and not st.get('hard_pending'):
         st['hs'] = {'dt': dt, 'am': am, 'pref': pref}      # a payment offered together with the hardship is kept
