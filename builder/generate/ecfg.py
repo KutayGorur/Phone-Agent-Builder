@@ -196,7 +196,7 @@ def build_E(spec):
     days_word = 'late' if 'late' in f_days else ('past due' if 'past' in f_days else 'overdue')
     first_q = pers.get('first_question') or 'Can you make this payment today?'
     say = ds.get('say') or 'calling about a late payment'
-    if not re.match(r'^(calling|from|about|phoning)', say.strip().lower()):
+    if not re.match(r'^(calling|from|about|phoning)\b', say.strip().lower()):
         say = 'calling about your overdue products'
     cq = op_confirm = opening.get('confirm_identity_question') or 'Am I speaking with {title} {last_name}?'
     mwho = re.search(r'with (.+?)\?', cq)

@@ -325,10 +325,18 @@ def save(st):
 
 
 def speak(core):
+    """A fixed line, spoken word for word (no model call)."""
+    vars['say_text'] = core
     vars['instruction'] = ('Say the following to the customer in natural spoken English, in one to three short '
                            'sentences. Keep every name, number, amount and date exactly as written and add nothing '
                            'else: ' + core)
     vars['route'] = 'say'
+
+
+def ask(instr):
+    """An instruction the speaking model words itself (used when the customer asked something)."""
+    vars['instruction'] = instr
+    vars['route'] = 'ask'
 
 
 def route(r):
@@ -482,8 +490,7 @@ def reask(st, lead='', kind='question'):
            E['unknown_say'] + '". Never invent figures, dates or reasons, and never offer a discount, waiver or '
            'payment plan. If they ask whether you are a robot or an AI, say "' + E['ai_say'] + '". '
            'If they ask whether this call is a scam, say that ' + E['scam_say'] + '. Then say: ' + q)
-    vars['instruction'] = (lead + ' ' if lead else '') + ans
-    route('say')
+    ask((lead + ' ' if lead else '') + ans)
 
 
 # ------------------------------------------------------------------ closing
@@ -783,9 +790,7 @@ def special(st, it, pref):
     if kind == 'transfer':
         if I.get('ask_first') and not st['human']:
             st['human'] += 1
-            vars['instruction'] = ('The customer asked for a person. Say that you can try to help first and ask what they '
-                                   'need help with. Then wait.')
-            route('say')
+            speak('I can try to help you first. What do you need help with?')
             return True
         text = I.get('transfer_say') or 'I am transferring you now.'
         do_transfer(st, I['queue'], I['close']['outcome'], I['close'].get('reason'), text)
@@ -808,15 +813,13 @@ def special(st, it, pref):
             return True
         st['hard_pending'] = True
         st['hard'] += 1
-        vars['instruction'] = ('Say one short sentence of sympathy (do not discuss payment). Then ask: ' + hardship_offer_text())
-        route('say')
+        speak('I am sorry to hear that. ' + hardship_offer_text())
         return True
     return False
 
 
 def hardship_offer(st, I):
-    vars['instruction'] = hardship_offer_text() + ' Ask only that.'
-    route('say')
+    speak(hardship_offer_text())
 
 
 def hardship_reply(st, it, dt, am, pref, scope_all):
@@ -908,6 +911,11 @@ def turn_all(st, it, dt, am, pref):
         intro = "Let's go through them one by one."
         return refusal(st, p0, intro + ' Your %s.' % p0['label'])
     if it in ('offer', 'change'):
+        named = target_products(st, pref)
+        if pref and len(named) == 1 and len([q for q in prods if q['status'] == 'open']) > 1:
+            st['all'] = False
+            st['cur'] = named[0]['i']
+            return offer(st, named[0], dt, am)
         if dt:
             kind, dd = free_date(dt, today)
             if kind == 'vague' and not st['vg_all']:
@@ -1185,8 +1193,7 @@ def main():
     except Exception as ex:
         vars['engine_err'] = repr(ex)[:300]
         if st.get('prods'):
-            vars['instruction'] = 'Apologise briefly and ask the customer to repeat what they just said.'
-            route('say')
+            ask('Apologise briefly and ask the customer to repeat what they just said.')
         else:
             set_close(E['create_failed']['outcome'], E['create_failed']['reason'], goodbye('I am sorry, there was a problem.'))
     save(st)

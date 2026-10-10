@@ -130,7 +130,7 @@ SCEN = {
     'PUB-09': [I('restructuring')],
     'PUB-10': [I('refuse'), I('agree'), I('agree')],
     'PUB-11': [I('refuse'), I('offer', x_date='this Friday'), I('agree'), I('agree'), I('agree')],
-    'PUB-12': [I('refuse'), I('offer', x_date='tomorrow'), I('refuse'), I('refuse'), I('refuse'), I('agree')],
+    'PUB-12': [I('offer', x_date='tomorrow', x_product='credit card'), I('refuse'), I('refuse'), I('refuse'), I('agree')],
     'PUB-13': [I('offer', x_date='30 October'), I('agree')],
 }
 WRONG = {

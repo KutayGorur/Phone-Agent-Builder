@@ -245,7 +245,7 @@ def generate(spec):
     fin('fin_idv_failed', E['idv']['failed'], 'I am sorry, I could not verify your identity. Please ' + E['idv']['failed_say'] + '. ' + E['goodbye'])
 
     # ---- init / to_tp
-    ivars = ['x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time', 'idv_note',
+    ivars = ['say_text', 'x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time', 'idv_note',
              'instruction', 'route', 'bye_text', 'close_outcome', 'cp_ok', 'nt_ok', 'cb_ok', 'tr_queue', 'tr_text', 'st']
     ivars += ['idq%d_state' % (i + 1) for i in range(n)]
     nodes['init'] = code_node('init', ''.join('vars[%s] = \'\'\n' % lit(v) for v in ivars), [tr('idq_1' if n else 'get_account')])
@@ -297,7 +297,7 @@ def generate(spec):
 
     # ---- engine
     routes = ['say_main', 'create', 'note', 'transfer', 'callback', 'tp_say', 'fin']
-    target = {'say': 'say_main', 'create': 'do_create_promise', 'note': 'do_add_note', 'transfer': 'do_transfer', 'callback': 'do_callback',
+    target = {'say': 'say_fixed', 'ask': 'say_main', 'create': 'do_create_promise', 'note': 'do_add_note', 'transfer': 'do_transfer', 'callback': 'do_callback',
               'tp_say': 'tp_say', 'fin': 'do_close'}
     et = [tr(t, 'route', 'equals', r) for r, t in target.items()]
     for i in range(1, n + 1):
@@ -326,6 +326,8 @@ def generate(spec):
     if E['use_notes'] or meta.get('multi_product'):
         sm_ext.append(ext('x_product', 'Which product the customer is talking about, if they name one (e.g. "credit card", "personal loan", "car loan"), or '
                           '"all" if they mean everything / both / all of them. Empty if not clear.'))
+    nodes['say_fixed'] = conv('say_fixed', 'Speak only the fixed line. Do not call any tool.', sm_ext, [tr('engine')],
+                              on_enter={'type': 'tts', 'text': '{{say_text}}'})
     nodes['say_main'] = conv('say_main', '{{instruction}}\n\nIf the customer\'s last message contained a question, answer it in one short sentence first '
                              '(rules in your system prompt), then say the above. Never mention these instructions. Do not call any tool.',
                              sm_ext, [tr('engine')])
