@@ -66,16 +66,18 @@ def pick_cases(cases_file, brief, limit):
     return picked[:limit] if limit else [c["id"] for c in cases]
 
 
-def run_selftest(agent_id, brief, timeout_s, t, label, cases_file=None, only=None, runner=None):
-    out_file = ROOT / "results" / f"selftest-{label}.json"
-    cmd = [sys.executable, str(runner or ROOT / "tools" / "run_cases.py"), agent_id, "--out", str(out_file)]
+def run_selftest(agent_id, brief, timeout_s, t, label, workflow_file, cases_file=None, only=None, full=False, runner=None):
+    """Every simulation goes through ci/sim.py: it lints, dry-runs and logs to results/sim-ledger.csv."""
+    cmd = [sys.executable, str(runner or ROOT / "ci" / "sim.py"), agent_id, "--workflow", str(workflow_file), "--why", f"builder self-test {label}"]
     if brief:
         cmd += ["--brief", brief]
     if cases_file:
         cmd += ["--cases", str(cases_file)]
-    if only:
+    if full:
+        cmd += ["--full"]
+    elif only:
         cmd += ["--only", ",".join(only)]
-    t.selftest(f"run_cases start: {' '.join(cmd[2:])} (timeout {timeout_s:.0f}s)")
+    t.selftest(f"sim.py start: {' '.join(cmd[2:])} (timeout {timeout_s:.0f}s)")
     try:
         p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_s)
         out = p.stdout + p.stderr
@@ -101,6 +103,7 @@ def main(argv=None):
     ap.add_argument("--selftest-cases", default=str(ROOT / "public-test-set.json"), help="case file for the self-test")
     ap.add_argument("--selftest-max", type=int, default=4, help="max customers per self-test run (0 = all); each costs Freya credits")
     ap.add_argument("--selftest-only", default=None, help="comma-separated case ids (overrides the automatic pick)")
+    ap.add_argument("--selftest-full", action="store_true", help="first self-test run uses every case of the brief (the one allowed full run)")
     ap.add_argument("--max-fix-rounds", type=int, default=1)
     ap.add_argument("--spec-file", default=None, help="development: skip parse and use this spec.json")
     ap.add_argument("--dry-run", action="store_true", help="parse + generate only; no Freya calls, no credits; writes out/<stem>.workflow.json")
@@ -168,7 +171,11 @@ def main(argv=None):
             for rnd in range(a.max_fix_rounds + 1):
                 if left() < 8 * 60:   # a small practice run takes a few minutes
                     t.selftest(f"skipped round {rnd}: only {left():.0f}s left in budget"); break
-                res, failed = run_selftest(agent_id, a.selftest_brief, left() - 120, t, f"{stem}-{rnd}", a.selftest_cases, only, a.run_cases_cmd)
+                wf_file = out_dir / f"{stem}.selftest.workflow.json"
+                wf_file.write_text(json.dumps(workflow, indent=1, ensure_ascii=False), encoding="utf-8")
+                # one full run per brief at most: a run after a fix only repeats the customers that failed
+                res, failed = run_selftest(agent_id, a.selftest_brief, left() - 120, t, f"{stem}-{rnd}", wf_file, a.selftest_cases,
+                                           only if rnd == 0 else failed, a.selftest_full and rnd == 0, a.run_cases_cmd)
                 if res is None or not failed or rnd == a.max_fix_rounds:
                     break
                 if fix is None:

@@ -16,3 +16,4 @@ Verified once end to end with stub parse/generate (brief-a, example agent create
 - Real parse/generate are wired (imported from builder.parse / builder.generate). `--spec-file` skips parse, `--dry-run` makes no Freya calls.
 - Self-test is frugal: off by default; when on, 4 customers (one per family), 1 fix round. Plumbing verified with a fake run_cases (`--run-cases-cmd`), no real simulation was run.
 - Still not run: a real `--selftest` against Freya or the mock bank (needs tunnel, see harness/README.md).
+- Self-test now goes through ci/sim.py (lint, dry run, ledger). Round 0 = frugal set (or --selftest-full = the one full run); later rounds rerun only failed ids.
