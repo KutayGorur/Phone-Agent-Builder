@@ -38,3 +38,12 @@ python harness/report.py results/ --family --md results/c-report.md
 Counts every run in every file. Prints the mean pass rate, the strict score (a customer counts only when all runs pass, as in the final),
 flaky and never-passing customers, a table per customer, and the failure reasons with counts and one call id each.
 `results/` is gitignored in this repo, so the outputs stay local.
+
+## Pre-flight before any simulation (Freya credits are limited)
+
+Order of checks, cheapest first. Only the last one spends credits.
+
+1. `python harness/preflight.py <workflow.json> <tools.openapi.json>`: static check of the generated workflow against the brief's tool API file (URLs, body fields, enum values, stale names from another brief, enum values the workflow never mentions). Under a second, exit code 1 on errors. Try it on `examples/base-agent.json` against `tools/openapi.json` (0 errors) and against `test-briefs/tools-c.openapi.json` (flags the stale names).
+2. `python harness/mock_bank.py --selftest`: checks the case files and the scorer agree.
+3. In-process bank for local engine tests (no HTTP, no tunnel): `from harness.mock_bank import Bank; bank = Bank(api_dict, cases); cid = bank.new_session("TC-01")["variables"]["customer_id"]; status, result = bank.tool("verify_identity", {"customer_id": cid, ...})`, then `score_ledger(case, bank.ledger(cid))` from `tools/score.py`. A local driver (for example `builder/generate/local_sim.py`) can call the tools through it and score the result against `cases-*.json`.
+4. Only then a real `run_cases.py` simulation, one case first (`--only TC-01`), then the set.

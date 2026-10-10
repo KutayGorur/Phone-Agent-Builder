@@ -7,6 +7,9 @@
 - `harness/report.py`: pass-rate table from several `run_cases --out` files.
 - `harness/README.md`: how to use all of the above.
 
+## Added after the pause
+- `harness/preflight.py`: local static check of a generated workflow against a tool API file (no credits). See the README section "Pre-flight before any simulation".
+
 ## In progress
 Nothing.
 
