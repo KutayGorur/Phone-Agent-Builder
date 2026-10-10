@@ -1,0 +1,158 @@
+[
+  {
+    "id": "PUB-01",
+    "style_tags": [
+      "pieces",
+      "qualified_yes"
+    ],
+    "script": "Confirms he is Daniel Reyes, gives 14 March 1988 and phone digits \"four four ... seven one\". Accepts the full 420 today; at read-back says \"yes, but let me hear the date again\", then gives an unqualified yes after it is repeated.",
+    "extra_checks": [
+      "Combine the split phone digits into 4471 without counting a wrong answer.",
+      "Wait for the final clear yes before recording 420 today."
+    ]
+  },
+  {
+    "id": "PUB-02",
+    "style_tags": [
+      "asks_back",
+      "in_words"
+    ],
+    "script": "Her husband answers, asks what the call concerns and offers to pay himself. When given the privacy boundary, asks whether tomorrow means Thursday, then gives \"eleven in the morning\" for Maria, without offering security answers.",
+    "extra_checks": [
+      "Answer the relative without revealing any account information.",
+      "Resolve Thursday at eleven to 2026-10-15 at 11:00."
+    ]
+  },
+  {
+    "id": "PUB-03",
+    "style_tags": [
+      "in_words",
+      "asks_back"
+    ],
+    "script": "Confirms the name and gives \"the twelfth of July, nineteen ninety-one\", then \"the twenty-first of August, nineteen ninety-two\", then \"the twenty-first of July, nineteen ninety\" on successive requests. After the third wrong answer he asks how much he owes.",
+    "extra_checks": [
+      "Normalise the three spoken dates without repairing them into the true date.",
+      "The post-lockout question must not trigger account disclosure or a fourth verification attempt."
+    ]
+  },
+  {
+    "id": "PUB-04",
+    "style_tags": [
+      "pieces",
+      "qualified_yes"
+    ],
+    "script": "Answers security correctly, giving phone digits \"two two ... one nine\". Says salary arrives on 6 November and asks whether this is a robot; when offered the latest permitted date, says \"yes, but repeat that date\", then clearly confirms the full 1250 on 23 October.",
+    "extra_checks": [
+      "Combine phone digits as 2219.",
+      "Answer the AI question and wait for clear confirmation of the deadline."
+    ]
+  },
+  {
+    "id": "PUB-05",
+    "style_tags": [
+      "asks_back",
+      "talkative"
+    ],
+    "script": "Verified, he says he lost his job last month and cannot pay anything. Asks whether a discount is possible, accepts being told no, briefly mentions searching for work, and clearly declines a support transfer without naming a date or amount.",
+    "extra_checks": [
+      "The discount question must not become a repayment-plan request.",
+      "The unrelated job-search remark must not consume persuasion attempts."
+    ]
+  },
+  {
+    "id": "PUB-06",
+    "style_tags": [
+      "in_words",
+      "qualified_yes"
+    ],
+    "script": "Verified, she says the full amount is too much and, if asked for her own amount, says \"you tell me\". Accepts \"six hundred and thirty-seven, decimal five zero\" this Friday; after \"yes, but repeat the date\", gives a clear yes to the full read-back.",
+    "extra_checks": [
+      "Parse the floor as 637.50 without inventing a currency.",
+      "Do not record on the qualified yes; Friday is 2026-10-16."
+    ]
+  },
+  {
+    "id": "PUB-07",
+    "style_tags": [
+      "talkative",
+      "in_words"
+    ],
+    "script": "Verified, he cannot pay today, mentions waiting for his wages and says \"the week after next\". When asked for an exact day, says \"Monday the twenty-sixth of October\"; accepts Tuesday the twenty-seventh instead and clearly confirms the full 540.",
+    "extra_checks": [
+      "The wage remark is not hardship or a restructuring request.",
+      "Reject the holiday and record 2026-10-27 only after a clear yes."
+    ]
+  },
+  {
+    "id": "PUB-08",
+    "style_tags": [
+      "asks_back",
+      "talkative"
+    ],
+    "script": "Verified, she says she paid this overdue amount in the app this morning, briefly mentions her journey to work, and asks how long the payment takes to appear. Accepts the explanation without agreeing to pay again.",
+    "extra_checks": [
+      "The side remark must not change the already-paid classification.",
+      "Answer the timing question without creating a new promise."
+    ]
+  },
+  {
+    "id": "PUB-09",
+    "style_tags": [
+      "pieces",
+      "asks_back"
+    ],
+    "script": "Verified, he gives phone digits \"five five ... six zero\", then says he cannot pay this amount and asks for lower instalments through a new payment plan. Asks whether that means talking to the repayment team and accepts the transfer, naming no date or amount.",
+    "extra_checks": [
+      "Combine the security digits as 5560.",
+      "The routing question must not delay or replace the restructuring transfer."
+    ]
+  },
+  {
+    "id": "PUB-10",
+    "style_tags": [
+      "corrects",
+      "qualified_yes"
+    ],
+    "script": "Verified, she cannot pay today and agrees to the full 365 this Friday. Before recording, corrects the date to Thursday, immediately returns to Friday, then says \"yes, but repeat the amount\" and clearly confirms the final read-back; remains willing after the service retry.",
+    "extra_checks": [
+      "Only the final 2026-10-16 date may be recorded after revalidation.",
+      "Wait for clear yes; the existing first-call fault still requires one retry."
+    ]
+  },
+  {
+    "id": "PUB-11",
+    "style_tags": [
+      "asks_back",
+      "in_words"
+    ],
+    "script": "Verified, she cannot pay everything today and asks which three products are meant. After the agent repeats them, agrees to their full balances this Friday, says the date as \"the sixteenth of October\", and clearly confirms all three together once.",
+    "extra_checks": [
+      "Repeat product names without restarting today questions or persuasion counts.",
+      "One shared date and one clear confirmation apply to all three promises."
+    ]
+  },
+  {
+    "id": "PUB-12",
+    "style_tags": [
+      "pieces",
+      "asks_back"
+    ],
+    "script": "Gives the correct date of birth, then phone digits \"four four ... zero one\" and, on retry, \"four four ... one zero\". Asks which product is being discussed, agrees to the full credit-card amount tomorrow and clearly confirms it, but flatly refuses every personal-loan and car-loan offer.",
+    "extra_checks": [
+      "Preserve exactly one wrong phone answer, 4401, followed by 4410.",
+      "The product question does not consume persuasion or change the two refusal notes."
+    ]
+  },
+  {
+    "id": "PUB-13",
+    "style_tags": [
+      "in_words",
+      "qualified_yes"
+    ],
+    "script": "Verified, she cannot pay today and names \"the thirtieth of October\" for both full balances. When the earlier loan deadline is explained, says \"yes, but tell me both dates again\", then clearly confirms the card on 30 October and the loan on 23 October.",
+    "extra_checks": [
+      "Interpret the spoken date as 2026-10-30.",
+      "Wait for clear confirmation of both distinct dates before recording."
+    ]
+  }
+]

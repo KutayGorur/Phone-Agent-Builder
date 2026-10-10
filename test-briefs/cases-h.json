@@ -1,0 +1,407 @@
+[
+  {
+    "id": "TH-01",
+    "brief": "H",
+    "family": "Happy path",
+    "level": "hard",
+    "title": "Clear confirmation, full balance today",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      }
+    ],
+    "script": "Confirms the name and answers each security question correctly in order. Accepts the full card balance today and gives a clear yes after the complete read-back.",
+    "expected": {
+      "outcome": "COMMIT",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 384.0,
+          "date": "2027-02-08"
+        }
+      ],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "No account information before all security answers pass; recording follows a clear yes; exact confirmation sentence is said only after ok=true.",
+      "p1: 2027-02-08 (Monday) is a business day; offset 0. Deadline count 7: 1=2027-02-09, 2=2027-02-11, 3=2027-02-12, 4=2027-02-16, 5=2027-02-17, 6=2027-02-18, 7=2027-02-19. Weekends and listed holidays excluded; chosen date <= 2027-02-19."
+    ],
+    "bank": {
+      "max_wrong": 4
+    }
+  },
+  {
+    "id": "TH-02",
+    "brief": "H",
+    "family": "Third party",
+    "level": "hard",
+    "title": "Relative offers to pay, then earliest callback",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      }
+    ],
+    "script": "A sibling answers, asks why the bank is calling and offers to pay. After the privacy boundary is explained without account disclosure, says Avery is available tomorrow at 09:45.",
+    "expected": {
+      "outcome": "NO_ANSWER",
+      "reason": "return_call",
+      "promises": [],
+      "notes": [],
+      "callbacks": [
+        {
+          "date": "2027-02-09",
+          "time": "09:45"
+        }
+      ],
+      "transfers": []
+    },
+    "checks": [
+      "No verification or get_account, no amount or product disclosure, exactly one final close.",
+      "Callback arithmetic: after 2027-02-08 (Monday), next business day 1=2027-02-09 (Tuesday); excludes weekends and listed holidays. 09:45 is inclusive window start and later than now 2027-02-08T10:40."
+    ],
+    "bank": {
+      "max_wrong": 4
+    }
+  },
+  {
+    "id": "TH-03",
+    "brief": "H",
+    "family": "Identity",
+    "level": "hard",
+    "title": "Wrong-answer limit accumulated on first question",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      }
+    ],
+    "script": "Confirms the name. On separate verification attempts gives membership years 2001, then 2002, then 2003, then 2004, all wrong; never supplies the correct year or any later security answer.",
+    "expected": {
+      "outcome": "ID_STOP",
+      "reason": "bad_answers",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Exactly 4 wrong answers end verification; no get_account and no debt disclosure."
+    ],
+    "bank": {
+      "max_wrong": 4
+    }
+  },
+  {
+    "id": "TH-04",
+    "brief": "H",
+    "family": "Hardship",
+    "level": "hard",
+    "title": "Hardship wins over request for a plan",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      }
+    ],
+    "script": "Verified. Says illness prevents any payment and asks about a new repayment plan in the same turn. Declines the offered care transfer and volunteers no amount or date.",
+    "expected": {
+      "outcome": "NO_COMMIT",
+      "reason": "DISTRESS",
+      "promises": [],
+      "notes": [
+        {
+          "product_id": "p1",
+          "reason": "DISTRESS"
+        }
+      ],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Sympathy and care offer, no persuasion, no restructuring transfer; hardship has priority over ordinary refusal and plan request."
+    ],
+    "bank": {
+      "max_wrong": 4
+    }
+  },
+  {
+    "id": "TH-05",
+    "brief": "H",
+    "family": "Dates and amounts",
+    "level": "hard",
+    "title": "Vague period becomes a holiday, below-floor amount corrected",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      }
+    ],
+    "script": "Verified. Cannot pay today and says sometime this week; when asked once for an exact day names 2027-02-10. Proposes 72, accepts the agent's floor offer of 96 and the next business day instead of the holiday, then clearly confirms.",
+    "expected": {
+      "outcome": "COMMIT",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 96.0,
+          "date": "2027-02-11"
+        }
+      ],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "2027-02-10 (Wednesday) is a bank holiday; offer 2027-02-11 (Thursday); 72 is below floor 96; remainder stays overdue; no persuasion consumed by a proposed amount or date.",
+      "p1: Business days after 2027-02-08 through chosen 2027-02-11 (Thursday): 1=2027-02-09, 2=2027-02-11. Deadline count 7: 1=2027-02-09, 2=2027-02-11, 3=2027-02-12, 4=2027-02-16, 5=2027-02-17, 6=2027-02-18, 7=2027-02-19. Weekends and listed holidays excluded; chosen date <= 2027-02-19."
+    ],
+    "bank": {
+      "max_wrong": 4
+    }
+  },
+  {
+    "id": "TH-06",
+    "brief": "H",
+    "family": "Multi-product",
+    "level": "hard",
+    "title": "Partial commitment with product-specific attempts",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      },
+      {
+        "type": "retail_loan",
+        "unpaid_balance": 735.0,
+        "days_overdue": 12,
+        "regular_instalment": 245.0
+      }
+    ],
+    "script": "Verified. Cannot pay everything today. Accepts the full card balance on the next business day, but flatly refuses every loan offer without any hardship or dispute; clearly confirms only the card.",
+    "expected": {
+      "outcome": "COMMIT",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 384.0,
+          "date": "2027-02-09"
+        }
+      ],
+      "notes": [
+        {
+          "product_id": "p2",
+          "reason": "NO_AGREEMENT"
+        }
+      ],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Both products stated before ask; no repeat today question per product; loan has 2 persuasion attempts; note only p2; one clear read-back and confirmation.",
+      "p1: Business days after 2027-02-08 through chosen 2027-02-09 (Tuesday): 1=2027-02-09. Deadline count 7: 1=2027-02-09, 2=2027-02-11, 3=2027-02-12, 4=2027-02-16, 5=2027-02-17, 6=2027-02-18, 7=2027-02-19. Weekends and listed holidays excluded; chosen date <= 2027-02-19."
+    ],
+    "bank": {
+      "max_wrong": 4
+    }
+  },
+  {
+    "id": "TH-07",
+    "brief": "H",
+    "family": "Tool failure",
+    "level": "hard",
+    "title": "First promise fails on both attempts",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      },
+      {
+        "type": "retail_loan",
+        "unpaid_balance": 735.0,
+        "days_overdue": 12,
+        "regular_instalment": 245.0
+      }
+    ],
+    "script": "Verified. Accepts the full balance of every listed product on the next business day and clearly confirms once. If the agent reports a recording failure, remains willing to honour any other successfully recorded promise.",
+    "expected": {
+      "outcome": "COMMIT",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p2",
+          "amount": 735.0,
+          "date": "2027-02-09"
+        }
+      ],
+      "notes": [
+        {
+          "product_id": "p1",
+          "reason": "WRITE_FAIL"
+        }
+      ],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Two create_promise attempts for p1, neither reported recorded; no third retry; preserve other successes.",
+      "p2: Business days after 2027-02-08 through chosen 2027-02-09 (Tuesday): 1=2027-02-09. Deadline count 4: 1=2027-02-09, 2=2027-02-11, 3=2027-02-12, 4=2027-02-16. Weekends and listed holidays excluded; chosen date <= 2027-02-16."
+    ],
+    "bank": {
+      "max_wrong": 4
+    },
+    "faults": [
+      {
+        "tool": "create_promise",
+        "fail_first_n": 2
+      }
+    ]
+  },
+  {
+    "id": "TH-08",
+    "brief": "H",
+    "family": "Restructuring",
+    "level": "hard",
+    "title": "Plan request before any record suppresses all notes",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-02-08T10:40"
+    },
+    "identity": {
+      "membership_year": "2016",
+      "postal_code": "8613"
+    },
+    "products": [
+      {
+        "type": "revolving_card",
+        "unpaid_balance": 384.0,
+        "days_overdue": 3,
+        "card_last4": "6829",
+        "card_minimum": 96.0
+      },
+      {
+        "type": "retail_loan",
+        "unpaid_balance": 735.0,
+        "days_overdue": 12,
+        "regular_instalment": 245.0
+      }
+    ],
+    "script": "Verified. Before agreeing any promise, asks for lower scheduled payments through a new plan. Mentions no illness, bereavement or job loss and names no promise amount or date.",
+    "expected": {
+      "outcome": "REFER",
+      "reason": "plan_request",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": [
+        {
+          "queue": "Q_PLAN"
+        }
+      ]
+    },
+    "checks": [
+      "No plan described, no promises and no notes; transfer to plan queue, then goodbye and exactly one close."
+    ],
+    "bank": {
+      "max_wrong": 4
+    }
+  }
+]

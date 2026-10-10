@@ -1,0 +1,112 @@
+[
+  {
+    "id": "TD-01",
+    "style_tags": [
+      "qualified_yes"
+    ],
+    "script": "Verified, she cannot pay everything today and agrees to all three full balances on Wednesday 25 November. At read-back says \"yes, but repeat the products\", then gives one clear yes to all three together.",
+    "extra_checks": [
+      "Record only after the final unqualified yes, with all three dates unchanged."
+    ]
+  },
+  {
+    "id": "TD-02",
+    "style_tags": [
+      "in_words"
+    ],
+    "script": "Verified, he cannot pay today and requests \"the first of December\" for every full balance. Accepts the two earlier product deadlines when explained, repeats all three dates correctly and clearly confirms.",
+    "extra_checks": [
+      "Spoken 1 December keeps p1 there and p2/p3 at 2026-11-26."
+    ]
+  },
+  {
+    "id": "TD-03",
+    "style_tags": [
+      "asks_back"
+    ],
+    "script": "Verified, she agrees to the full card balance today, but says the full overdraft is too much. Asks what the minimum is, accepts the offered 120 on Tuesday next week and clearly confirms both promises together.",
+    "extra_checks": [
+      "The minimum question is not a new amount proposal or a refusal; keep both product dates."
+    ]
+  },
+  {
+    "id": "TD-04",
+    "style_tags": [
+      "talkative"
+    ],
+    "script": "Verified, he says he never took out the loan, briefly talks about an old address and does not argue. Accepts the card balance in full this Friday and clearly confirms it.",
+    "extra_checks": [
+      "The address remark must not turn the loan dispute into a paid claim."
+    ]
+  },
+  {
+    "id": "TD-05",
+    "style_tags": [
+      "asks_back"
+    ],
+    "script": "Verified, she asks which product is being discussed before each series of offers. Flatly refuses every offer for both products, naming no date or amount and mentioning neither hardship nor dispute.",
+    "extra_checks": [
+      "Product clarification consumes no persuasion attempt; both final notes remain REFUSED."
+    ]
+  },
+  {
+    "id": "TD-06",
+    "style_tags": [
+      "talkative"
+    ],
+    "script": "The person answering says Beat Keller does not live there and this is not his number, then briefly mentions how long they have owned the phone. Offers no callback or verification answers.",
+    "extra_checks": [
+      "Extra speech must not obscure the wrong-number classification or create a callback."
+    ]
+  },
+  {
+    "id": "TD-07",
+    "style_tags": [
+      "in_words"
+    ],
+    "script": "Her husband answers and proposes \"today, half past six in the evening\". When asked once for another time, says \"tomorrow, half past nine in the morning\" and confirms that he means morning.",
+    "extra_checks": [
+      "Keep rejected 18:30 and accepted 2026-11-19 at 09:30."
+    ]
+  },
+  {
+    "id": "TD-08",
+    "style_tags": [
+      "pieces"
+    ],
+    "script": "Confirms the name, gives opening year \"two zero ... zero nine\" and numeric birth date 07/11/1975. Cannot pay today, requests next Friday, then accepts and clearly confirms the latest possible date instead.",
+    "extra_checks": [
+      "Year is 2009; numeric birth date remains DMY and final promise remains 2026-11-26."
+    ]
+  },
+  {
+    "id": "TD-09",
+    "style_tags": [
+      "qualified_yes"
+    ],
+    "script": "Verified, he cannot pay today and accepts both full balances tomorrow. At read-back says \"yes, but repeat the date\", then clearly confirms once; remains willing to honour the second product when the first cannot be recorded.",
+    "extra_checks": [
+      "No record before clear yes; retain the input two-call fault and only p2 success."
+    ]
+  },
+  {
+    "id": "TD-10",
+    "style_tags": [
+      "asks_back"
+    ],
+    "script": "Verified, he asks for a three-month payment holiday because money is tight, then asks whether that request goes to a specialist. Accepts the explanation and transfer, naming no promise date or amount and no illness, bereavement or job loss.",
+    "extra_checks": [
+      "Clarification must preserve restructuring, not hardship or a payment promise."
+    ]
+  },
+  {
+    "id": "TD-11",
+    "style_tags": [
+      "qualified_yes"
+    ],
+    "script": "Initially answers only \"Speaking\"; on the second name question says \"Yes, that is me\". Passes security and accepts the full 180 today; at read-back asks for repetition before finally giving a clear yes.",
+    "extra_checks": [
+      "Speaking must not pass presence; final read-back repetition is not another presence check."
+    ]
+  }
+]

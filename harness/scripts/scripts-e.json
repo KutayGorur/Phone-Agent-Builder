@@ -1,0 +1,92 @@
+[
+  {
+    "id": "TE-01",
+    "style_tags": [
+      "in_words"
+    ],
+    "script": "Verified, she cannot pay today and asks to pay both full balances on \"Friday the twentieth of November\". Accepts Monday the twenty-third instead and clearly confirms both together.",
+    "extra_checks": [
+      "Keep the holiday request and both adjusted dates at 2026-11-23."
+    ]
+  },
+  {
+    "id": "TE-02",
+    "style_tags": [
+      "asks_back"
+    ],
+    "script": "Verified, he cannot pay today and requests 1 December for both full balances. Asks the agent to repeat why the loan has an earlier date, then clearly confirms the card on 1 December and loan on 25 November.",
+    "extra_checks": [
+      "The question is not refusal; retain the two distinct product dates."
+    ]
+  },
+  {
+    "id": "TE-03",
+    "style_tags": [
+      "qualified_yes"
+    ],
+    "script": "Verified, she cannot pay today and requests full payment on 27 November. After hearing the deadline says \"yes, but repeat the amount\", then clearly confirms 1500 on 23 November.",
+    "extra_checks": [
+      "The qualified yes cannot trigger recording; final date remains 2026-11-23."
+    ]
+  },
+  {
+    "id": "TE-04",
+    "style_tags": [
+      "talkative"
+    ],
+    "script": "Verified, he says he never had the card, briefly mentions moving house and does not argue. Accepts the full loan balance today and clearly confirms it.",
+    "extra_checks": [
+      "The side remark leaves the card disputed and the loan promise unchanged."
+    ]
+  },
+  {
+    "id": "TE-05",
+    "style_tags": [
+      "in_words"
+    ],
+    "script": "Confirms the name, then gives birth dates twelve, thirteen and fourteen May 1980 on separate retries, before correctly giving fifteen May 1980. Finally gives postcode \"four two zero zero\".",
+    "extra_checks": [
+      "Keep three wrong birth dates, one correct birth date, then fourth wrong answer 4200."
+    ]
+  },
+  {
+    "id": "TE-06",
+    "style_tags": [
+      "pieces"
+    ],
+    "script": "Verified, she gives postcode \"five five ... zero zero\", asks for lower instalments and asks whether a specialist can discuss them. Accepts the transfer without naming a promise date or amount.",
+    "extra_checks": [
+      "Postcode is 5500; specialist question preserves restructuring with no notes."
+    ]
+  },
+  {
+    "id": "TE-07",
+    "style_tags": [
+      "qualified_yes"
+    ],
+    "script": "Verified, he cannot pay today and accepts both full balances on Thursday. Says \"yes, but repeat the amounts\" at read-back, then clearly confirms once and remains willing to pay the loan after the card-recording failure.",
+    "extra_checks": [
+      "Only the final clear yes permits calls; retain the two-call fault and p2 promise."
+    ]
+  },
+  {
+    "id": "TE-08",
+    "style_tags": [
+      "in_words"
+    ],
+    "script": "Her sister answers and says Maria can be called \"tomorrow at nine in the morning\", then clarifies \"nine a.m., not evening\". Offers no security answers or account discussion.",
+    "extra_checks": [
+      "Both phrases mean 2026-11-18 at 09:00, the inclusive lower boundary."
+    ]
+  },
+  {
+    "id": "TE-09",
+    "style_tags": [
+      "talkative"
+    ],
+    "script": "The person answering says Mr Beck passed away in the summer and briefly mentions that his family is handling his affairs. Offers no payment, callback or security answers.",
+    "extra_checks": [
+      "The extra family remark does not permit further questions or account disclosure."
+    ]
+  }
+]

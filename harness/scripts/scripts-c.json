@@ -1,0 +1,82 @@
+[
+  {
+    "id": "TC-01",
+    "style_tags": [
+      "pieces"
+    ],
+    "script": "Confirms she is Karin Lund, gives 12 September 1984 and postcode \"eight two ... zero zero\". Accepts the full 560 today and clearly confirms.",
+    "extra_checks": [
+      "Split postcode becomes 8200 without an extra verification attempt."
+    ]
+  },
+  {
+    "id": "TC-02",
+    "style_tags": [
+      "asks_back"
+    ],
+    "script": "Verified, he cannot pay today and says the full amount is too much. Asks the agent to repeat the floor, accepts 310 on this Saturday, then clearly accepts and confirms the replacement business day offered.",
+    "extra_checks": [
+      "The repetition question is not refusal; preserve holiday adjustment to 2026-11-03."
+    ]
+  },
+  {
+    "id": "TC-03",
+    "style_tags": [
+      "in_words"
+    ],
+    "script": "Confirms the name, gives \"the fifth of July, nineteen ninety-one\", then the correct fifth of June 1991 on retry. Gives postcode \"seven zero zero one\", then asks how much he owes.",
+    "extra_checks": [
+      "Keep two wrong answers total; spoken 7001 remains wrong and no amount is disclosed."
+    ]
+  },
+  {
+    "id": "TC-04",
+    "style_tags": [
+      "pieces"
+    ],
+    "script": "Confirms the name, gives the numeric date as \"03 ... 04 ... 1990\" and postcode \"two three ... zero zero\". Accepts the full 560 tomorrow and clearly confirms.",
+    "extra_checks": [
+      "Preserve numeric-only month-first interpretation, 1990-03-04, and postcode 2300."
+    ]
+  },
+  {
+    "id": "TC-05",
+    "style_tags": [
+      "asks_back"
+    ],
+    "script": "Verified, he cannot pay today and asks the agent to repeat each offer before responding. Rejects the full amount on Friday, rejects the minimum tomorrow, then accepts and clearly confirms the minimum 500 on the last permitted day.",
+    "extra_checks": [
+      "Repetition questions do not consume an attempt; only the three substantive responses count."
+    ]
+  },
+  {
+    "id": "TC-06",
+    "style_tags": [
+      "in_words"
+    ],
+    "script": "Her husband answers, asks what the call concerns and proposes tomorrow at \"six in the evening\". After the permitted retry, says \"Friday at ten in the morning\" and does not offer security answers.",
+    "extra_checks": [
+      "Preserve first invalid 18:00 and final 2026-10-30 at 10:00 without disclosure."
+    ]
+  },
+  {
+    "id": "TC-07",
+    "style_tags": [
+      "talkative"
+    ],
+    "script": "Verified, he says he lost his job last month and briefly describes looking for work. Clearly accepts the care-team transfer and proposes no amount or date.",
+    "extra_checks": [
+      "The side remark must not trigger persuasion or substitute another transfer queue."
+    ]
+  },
+  {
+    "id": "TC-08",
+    "style_tags": [
+      "asks_back"
+    ],
+    "script": "Verified, she says she paid this overdue amount yesterday by bank transfer and asks how long it takes to appear. Accepts the explanation and declines to make another promise.",
+    "extra_checks": [
+      "The timing question leaves the already-paid outcome and empty promise list intact."
+    ]
+  }
+]

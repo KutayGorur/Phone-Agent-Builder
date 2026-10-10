@@ -1,0 +1,360 @@
+[
+  {
+    "id": "TF-01",
+    "brief": "F",
+    "family": "Happy path",
+    "level": "hard",
+    "title": "Clear confirmation, full balance today",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 3,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "Confirms the name and answers each security question correctly in order. Accepts the full card balance today and gives a clear yes after the complete read-back.",
+    "expected": {
+      "outcome": "pledged",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 384.0,
+          "date": "2026-12-14"
+        }
+      ],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "No account information before all security answers pass; recording follows a clear yes; exact confirmation sentence is said only after ok=true.",
+      "p1: 2026-12-14 (Monday) is a business day; offset 0. Deadline count 9: 1=2026-12-15, 2=2026-12-17, 3=2026-12-18, 4=2026-12-21, 5=2026-12-22, 6=2026-12-23, 7=2026-12-24, 8=2026-12-25, 9=2026-12-29. Weekends and listed holidays excluded; chosen date <= 2026-12-29."
+    ],
+    "bank": {
+      "max_wrong": 2
+    }
+  },
+  {
+    "id": "TF-02",
+    "brief": "F",
+    "family": "Third party",
+    "level": "hard",
+    "title": "Relative offers to pay, then earliest callback",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 3,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "A sibling answers, asks why the bank is calling and offers to pay. After the privacy boundary is explained without account disclosure, says Avery is available tomorrow at 08:45.",
+    "expected": {
+      "outcome": "unreached",
+      "reason": "return_call",
+      "promises": [],
+      "notes": [],
+      "callbacks": [
+        {
+          "date": "2026-12-15",
+          "time": "08:45"
+        }
+      ],
+      "transfers": []
+    },
+    "checks": [
+      "No verification or get_account, no amount or product disclosure, exactly one final close.",
+      "Callback arithmetic: after 2026-12-14 (Monday), next business day 1=2026-12-15 (Tuesday); excludes weekends and listed holidays. 08:45 is inclusive window start and later than now 2026-12-14T11:20."
+    ],
+    "bank": {
+      "max_wrong": 2
+    }
+  },
+  {
+    "id": "TF-03",
+    "brief": "F",
+    "family": "Identity",
+    "level": "hard",
+    "title": "Wrong-answer limit accumulated on first question",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 3,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "Confirms the name. On separate verification attempts gives membership years 2001, then 2002, all wrong; never supplies the correct year or any later security answer.",
+    "expected": {
+      "outcome": "unverified",
+      "reason": "bad_answers",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Exactly 2 wrong answers end verification; no get_account and no debt disclosure."
+    ],
+    "bank": {
+      "max_wrong": 2
+    }
+  },
+  {
+    "id": "TF-04",
+    "brief": "F",
+    "family": "Hardship",
+    "level": "hard",
+    "title": "Hardship wins over request for a plan",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 3,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "Verified. Says illness prevents any payment and asks about a new repayment plan in the same turn. Declines the offered care transfer and volunteers no amount or date.",
+    "expected": {
+      "outcome": "unpledged",
+      "reason": "vulnerability",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Sympathy and care offer, no persuasion, no restructuring transfer; hardship has priority over ordinary refusal and plan request."
+    ],
+    "bank": {
+      "max_wrong": 2
+    }
+  },
+  {
+    "id": "TF-05",
+    "brief": "F",
+    "family": "Dates and amounts",
+    "level": "hard",
+    "title": "Vague period becomes a holiday, below-floor amount corrected",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 3,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "Verified. Cannot pay today and says sometime this week; when asked once for an exact day names 2026-12-16. Proposes 72, accepts the agent's floor offer of 96 and the next business day instead of the holiday, then clearly confirms.",
+    "expected": {
+      "outcome": "pledged",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 96.0,
+          "date": "2026-12-17"
+        }
+      ],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "2026-12-16 (Wednesday) is a bank holiday; offer 2026-12-17 (Thursday); 72 is below floor 96; remainder stays overdue; no persuasion consumed by a proposed amount or date.",
+      "p1: Business days after 2026-12-14 through chosen 2026-12-17 (Thursday): 1=2026-12-15, 2=2026-12-17. Deadline count 9: 1=2026-12-15, 2=2026-12-17, 3=2026-12-18, 4=2026-12-21, 5=2026-12-22, 6=2026-12-23, 7=2026-12-24, 8=2026-12-25, 9=2026-12-29. Weekends and listed holidays excluded; chosen date <= 2026-12-29."
+    ],
+    "bank": {
+      "max_wrong": 2
+    }
+  },
+  {
+    "id": "TF-06",
+    "brief": "F",
+    "family": "Refusal",
+    "level": "hard",
+    "title": "Late band exhausts independent offers",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 8,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "Verified. Flatly refuses every offer without proposing any amount or date and without mentioning hardship, dispute or a human.",
+    "expected": {
+      "outcome": "unpledged",
+      "reason": "rejected",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Today question then exactly two persuasion attempts: full next business day, floor deadline; no repeated refused offer and no add_note in one-product Brief F."
+    ],
+    "bank": {
+      "max_wrong": 2
+    }
+  },
+  {
+    "id": "TF-07",
+    "brief": "F",
+    "family": "Tool failure",
+    "level": "hard",
+    "title": "First promise fails on both attempts",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 3,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "Verified. Accepts the full balance of every listed product on the next business day and clearly confirms once. If the agent reports a recording failure, remains willing to honour any other successfully recorded promise.",
+    "expected": {
+      "outcome": "unpledged",
+      "reason": "write_error",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Two create_promise attempts for p1, neither reported recorded; no third retry; preserve other successes."
+    ],
+    "bank": {
+      "max_wrong": 2
+    },
+    "faults": [
+      {
+        "tool": "create_promise",
+        "fail_first_n": 2
+      }
+    ]
+  },
+  {
+    "id": "TF-08",
+    "brief": "F",
+    "family": "Restructuring",
+    "level": "hard",
+    "title": "Plan request before any record suppresses all notes",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2026-12-14T11:20"
+    },
+    "identity": {
+      "membership_year": "2017",
+      "postal_code": "5932"
+    },
+    "products": [
+      {
+        "type": "payment_card",
+        "overdue_balance": 384.0,
+        "overdue_days": 3,
+        "card_last4": "6829",
+        "required_payment": 96.0
+      }
+    ],
+    "script": "Verified. Before agreeing any promise, asks for lower scheduled payments through a new plan. Mentions no illness, bereavement or job loss and names no promise amount or date.",
+    "expected": {
+      "outcome": "routed",
+      "reason": "plan_request",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": [
+        {
+          "queue": "plan_desk"
+        }
+      ]
+    },
+    "checks": [
+      "No plan described, no promises and no notes; transfer to plan queue, then goodbye and exactly one close."
+    ],
+    "bank": {
+      "max_wrong": 2
+    }
+  }
+]

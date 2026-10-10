@@ -1,0 +1,415 @@
+[
+  {
+    "id": "TG-01",
+    "brief": "G",
+    "family": "Happy path",
+    "level": "hard",
+    "title": "Clear confirmation, full balance today",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      }
+    ],
+    "script": "Confirms the name and answers each security question correctly in order. Accepts the full card balance today and gives a clear yes after the complete read-back.",
+    "expected": {
+      "outcome": "committed",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 384.0,
+          "date": "2027-01-18"
+        }
+      ],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "No account information before all security answers pass; recording follows a clear yes; exact confirmation sentence is said only after ok=true.",
+      "p1: 2027-01-18 (Monday) is a business day; offset 0. Deadline count 8: 1=2027-01-19, 2=2027-01-21, 3=2027-01-22, 4=2027-01-25, 5=2027-01-26, 6=2027-01-27, 7=2027-01-28, 8=2027-01-29. Weekends and listed holidays excluded; chosen date <= 2027-01-29."
+    ],
+    "bank": {
+      "max_wrong": 5
+    }
+  },
+  {
+    "id": "TG-02",
+    "brief": "G",
+    "family": "Third party",
+    "level": "hard",
+    "title": "Relative offers to pay, then earliest callback",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      }
+    ],
+    "script": "A sibling answers, asks why the bank is calling and offers to pay. After the privacy boundary is explained without account disclosure, says Avery is available tomorrow at 11:15.",
+    "expected": {
+      "outcome": "no_contact",
+      "reason": "return_call",
+      "promises": [],
+      "notes": [],
+      "callbacks": [
+        {
+          "date": "2027-01-19",
+          "time": "11:15"
+        }
+      ],
+      "transfers": []
+    },
+    "checks": [
+      "No verification or get_account, no amount or product disclosure, exactly one final close.",
+      "Callback arithmetic: after 2027-01-18 (Monday), next business day 1=2027-01-19 (Tuesday); excludes weekends and listed holidays. 11:15 is inclusive window start and later than now 2027-01-18T12:10."
+    ],
+    "bank": {
+      "max_wrong": 5
+    }
+  },
+  {
+    "id": "TG-03",
+    "brief": "G",
+    "family": "Identity",
+    "level": "hard",
+    "title": "Wrong-answer limit accumulated on first question",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      }
+    ],
+    "script": "Confirms the name. On separate verification attempts gives membership years 2001, then 2002, then 2003, then 2004, then 2005, all wrong; never supplies the correct year or any later security answer.",
+    "expected": {
+      "outcome": "id_incomplete",
+      "reason": "bad_answers",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Exactly 5 wrong answers end verification; no get_account and no debt disclosure."
+    ],
+    "bank": {
+      "max_wrong": 5
+    }
+  },
+  {
+    "id": "TG-04",
+    "brief": "G",
+    "family": "Hardship",
+    "level": "hard",
+    "title": "Hardship wins over request for a plan",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      }
+    ],
+    "script": "Verified. Says illness prevents any payment and asks about a new repayment plan in the same turn. Declines the offered care transfer and volunteers no amount or date.",
+    "expected": {
+      "outcome": "no_commitment",
+      "reason": "life_event",
+      "promises": [],
+      "notes": [
+        {
+          "product_id": "p1",
+          "reason": "life_event"
+        }
+      ],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Sympathy and care offer, no persuasion, no restructuring transfer; hardship has priority over ordinary refusal and plan request."
+    ],
+    "bank": {
+      "max_wrong": 5
+    }
+  },
+  {
+    "id": "TG-05",
+    "brief": "G",
+    "family": "Dates and amounts",
+    "level": "hard",
+    "title": "Vague period becomes a holiday, below-floor amount corrected",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      }
+    ],
+    "script": "Verified. Cannot pay today and says sometime this week; when asked once for an exact day names 2027-01-20. Proposes 72, accepts the agent's floor offer of 96 and the next business day instead of the holiday, then clearly confirms.",
+    "expected": {
+      "outcome": "committed",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 96.0,
+          "date": "2027-01-21"
+        }
+      ],
+      "notes": [],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "2027-01-20 (Wednesday) is a bank holiday; offer 2027-01-21 (Thursday); 72 is below floor 96; remainder stays overdue; no persuasion consumed by a proposed amount or date.",
+      "p1: Business days after 2027-01-18 through chosen 2027-01-21 (Thursday): 1=2027-01-19, 2=2027-01-21. Deadline count 8: 1=2027-01-19, 2=2027-01-21, 3=2027-01-22, 4=2027-01-25, 5=2027-01-26, 6=2027-01-27, 7=2027-01-28, 8=2027-01-29. Weekends and listed holidays excluded; chosen date <= 2027-01-29."
+    ],
+    "bank": {
+      "max_wrong": 5
+    }
+  },
+  {
+    "id": "TG-06",
+    "brief": "G",
+    "family": "Multi-product",
+    "level": "hard",
+    "title": "Partial commitment with product-specific attempts",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      },
+      {
+        "type": "term_loan",
+        "arrears_balance": 735.0,
+        "late_days": 10,
+        "payment_due": 245.0
+      }
+    ],
+    "script": "Verified. Cannot pay everything today. Accepts the full card balance on the next business day, but flatly refuses every loan offer without any hardship or dispute; clearly confirms only the card.",
+    "expected": {
+      "outcome": "committed",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p1",
+          "amount": 384.0,
+          "date": "2027-01-19"
+        }
+      ],
+      "notes": [
+        {
+          "product_id": "p2",
+          "reason": "declined_offer"
+        }
+      ],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Both products stated before ask; no repeat today question per product; loan has 3 persuasion attempts; note only p2; one clear read-back and confirmation.",
+      "p1: Business days after 2027-01-18 through chosen 2027-01-19 (Tuesday): 1=2027-01-19. Deadline count 8: 1=2027-01-19, 2=2027-01-21, 3=2027-01-22, 4=2027-01-25, 5=2027-01-26, 6=2027-01-27, 7=2027-01-28, 8=2027-01-29. Weekends and listed holidays excluded; chosen date <= 2027-01-29."
+    ],
+    "bank": {
+      "max_wrong": 5
+    }
+  },
+  {
+    "id": "TG-07",
+    "brief": "G",
+    "family": "Tool failure",
+    "level": "hard",
+    "title": "First promise fails on both attempts",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      },
+      {
+        "type": "term_loan",
+        "arrears_balance": 735.0,
+        "late_days": 10,
+        "payment_due": 245.0
+      }
+    ],
+    "script": "Verified. Accepts the full balance of every listed product on the next business day and clearly confirms once. If the agent reports a recording failure, remains willing to honour any other successfully recorded promise.",
+    "expected": {
+      "outcome": "committed",
+      "reason": null,
+      "promises": [
+        {
+          "product_id": "p2",
+          "amount": 735.0,
+          "date": "2027-01-19"
+        }
+      ],
+      "notes": [
+        {
+          "product_id": "p1",
+          "reason": "record_error"
+        }
+      ],
+      "callbacks": [],
+      "transfers": []
+    },
+    "checks": [
+      "Two create_promise attempts for p1, neither reported recorded; no third retry; preserve other successes.",
+      "p2: Business days after 2027-01-18 through chosen 2027-01-19 (Tuesday): 1=2027-01-19. Deadline count 5: 1=2027-01-19, 2=2027-01-21, 3=2027-01-22, 4=2027-01-25, 5=2027-01-26. Weekends and listed holidays excluded; chosen date <= 2027-01-26."
+    ],
+    "bank": {
+      "max_wrong": 5
+    },
+    "faults": [
+      {
+        "tool": "create_promise",
+        "fail_first_n": 2
+      }
+    ]
+  },
+  {
+    "id": "TG-08",
+    "brief": "G",
+    "family": "Restructuring",
+    "level": "hard",
+    "title": "Plan request before any record suppresses all notes",
+    "variables": {
+      "first_name": "Avery",
+      "last_name": "Vale",
+      "title": "Mx",
+      "now": "2027-01-18T12:10"
+    },
+    "identity": {
+      "membership_year": "2019",
+      "postal_code": "7285",
+      "security_pin_last2": "46"
+    },
+    "products": [
+      {
+        "type": "charge_card",
+        "arrears_balance": 384.0,
+        "late_days": 3,
+        "card_last4": "6829",
+        "card_floor": 96.0
+      },
+      {
+        "type": "term_loan",
+        "arrears_balance": 735.0,
+        "late_days": 10,
+        "payment_due": 245.0
+      }
+    ],
+    "script": "Verified. Before agreeing any promise, asks for lower scheduled payments through a new plan. Mentions no illness, bereavement or job loss and names no promise amount or date.",
+    "expected": {
+      "outcome": "handoff",
+      "reason": "plan_request",
+      "promises": [],
+      "notes": [],
+      "callbacks": [],
+      "transfers": [
+        {
+          "queue": "repayment_team"
+        }
+      ]
+    },
+    "checks": [
+      "No plan described, no promises and no notes; transfer to plan queue, then goodbye and exactly one close."
+    ],
+    "bank": {
+      "max_wrong": 5
+    }
+  }
+]
