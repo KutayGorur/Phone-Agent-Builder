@@ -263,9 +263,13 @@ def amount_check(text):
         d = digitize(t)
         m = re.search(r'(\d[\d,]*) ?,? ?(?:point|decimal|dot) ((?:\d ?)+)', d)
         if m:
+            if re.search(r'\d', d[:m.start()] + ' ' + d[m.end():]):      # a second number: an alternative or a range
+                return 'unclear', None
             return 'ok', float(m.group(1).replace(',', '') + '.' + m.group(2).replace(' ', ''))
         m = re.search(r'(\d[\d,]*)(?: [a-z]+)?(?: and)? (\d{1,2}) (?:pence|penny|pennies|p|cents?|c)\b', d)
         if m:
+            if re.search(r'\d', d[:m.start()] + ' ' + d[m.end():]):
+                return 'unclear', None
             return 'ok', float(m.group(1).replace(',', '')) + int(m.group(2)) / 100.0
         if re.search(r'\d,\d{1,2}(?!\d)|\d\s*p\b|\b(pence|pennies|penny)\b', t):
             return 'unclear', None
@@ -766,7 +770,8 @@ def offer(st, p, dt, am, lead=''):
     if am:
         kind, a = amount_check(am)
         if kind == 'unclear':
-            return speak(pre + 'Sorry, I did not catch the amount clearly. Please say it as one number. How much can you pay?')
+            st['sd'] = dt or ''                       # the date stays for the repeated amount
+            return speak(pre + 'Sorry, I did not catch the amount clearly. Could you repeat the amount you just mentioned as one number?')
         if a is not None and a > 0:
             if a + 0.004 < p['fl']:
                 if p['fb']:
@@ -831,6 +836,11 @@ def hardship_offer_text():
 
 
 _STOPW = ('the', 'and', 'for', 'with', 'ending', 'end', 'one')
+_ORD = ('first', 'second', 'third', 'fourth')
+_GENERIC = set(('it', 'that', 'this', 'one', 'ones', 'the', 'my', 'your', 'our', 'a', 'an', 'of', 'to', 'for', 'and', 'or', 'on', 'in', 'is',
+                'account', 'accounts', 'product', 'products', 'debt', 'debts', 'payment', 'payments', 'balance', 'balances',
+                'same', 'other', 'another', 'current', 'last', 'next', 'these', 'those', 'them', 'there', 'here', 'none',
+                'first', 'second', 'third', 'fourth', 'overdue', 'late', 'past', 'due'))
 
 
 def _keys(p):
@@ -848,6 +858,13 @@ def target_products(st, pref):
             return 'all', [p for p in prods if p['status'] in ('open', 'agreed')]
         words = set(re.findall(r'[a-z]+|\d+', w))
         words |= set(x[:-1] for x in words if x.endswith('s') and len(x) > 3)
+        for p in prods:                                   # a product id said as it is in the account data
+            pid = str(p.get('id') or '').lower()
+            if pid and pid in re.findall(r'[a-z0-9]+', w):
+                return 'one', [p]
+        for i, o in enumerate(_ORD):                      # "the first one", "the second"
+            if o in words and i < len(prods):
+                return 'one', [prods[i]]
         cands = [p for p in prods if _keys(p) & words]
         if cands:
             def wt(k):
@@ -856,14 +873,21 @@ def target_products(st, pref):
             top = max(sc.values())
             best = [p for p in cands if sc[p['i']] >= top - 1e-9]
             return ('one' if len(best) == 1 else 'ambig'), best
+        named = words - _GENERIC
+        if named and len(prods) > 1:                      # a product that is not one of the customer's: ask, never guess
+            play = [p for p in prods if p['status'] in ('open', 'agreed')] or prods
+            return 'ambig', play
     opened = [p for p in prods if p['status'] == 'open']
     if st['all'] and len(opened) > 1:
         return 'none', opened
     return 'none', [prods[st['cur']]]
 
 
-def ask_which(st, cands):
-    """Several products fit what the customer named: ask, change nothing."""
+def ask_which(st, cands, dt='', am=''):
+    """Several products fit what the customer named (or none of them does): ask, change nothing. The amount and date
+    they gave are kept for the answer."""
+    st['sd'] = dt or ''
+    st['sa'] = am or ''
     speak('Which one do you mean: %s?' % ' or '.join(p['label'] for p in cands))
 
 
@@ -1003,8 +1027,13 @@ def turn_inner(st):
         it = 'none'
     prods = st['prods']
     scope_all = False
-    if it not in ('offer', 'change'):
+    if it in ('offer', 'change'):
+        if not am and st.get('sa'):
+            am = st['sa']                         # the amount asked about earlier, now with its account
+        st['sa'] = ''
+    elif it not in ('question', 'none'):
         st['sd'] = ''
+        st['sa'] = ''
     if st.get('hard_pending') and st['phase'] == 'nego':
         hs = st.get('hs')
         if hs and it in ('offer', 'change') and not dt and not am:
@@ -1043,13 +1072,13 @@ def turn_inner(st):
     if it in ('offer', 'change'):
         kind, ts = target_products(st, pref)
         if kind == 'ambig':
-            return ask_which(st, ts)
+            return ask_which(st, ts, dt, am)
         if kind == 'one' and ts[0]['i'] != p['i'] and ts[0]['status'] == 'open':
             st['cur'] = ts[0]['i']                # the customer named another product: the offer is for that one
             p = ts[0]
         elif kind == 'all' and len(ts) > 1 and any(q['status'] == 'open' and q['i'] != p['i'] for q in ts):
             if am:
-                return ask_amount_account(st, dt)
+                return ask_amount_account(st, dt, am)
             if dt:
                 r = all_date(st, dt)
                 if r is not None:
@@ -1058,9 +1087,10 @@ def turn_inner(st):
     return reask(st)
 
 
-def ask_amount_account(st, dt):
+def ask_amount_account(st, dt, am=''):
     """An amount for "all of them" cannot be split by guessing: keep the date, ask which account the amount is for."""
     st['sd'] = dt or ''
+    st['sa'] = am or ''
     speak('Which account is that amount for?')
 
 
@@ -1118,13 +1148,13 @@ def turn_all(st, it, dt, am, pref):
         kind, named = target_products(st, pref)
         opened = [q for q in prods if q['status'] == 'open']
         if kind == 'ambig':
-            return ask_which(st, named)
+            return ask_which(st, named, dt, am)
         if kind == 'one' and len(opened) > 1:
             st['all'] = False
             st['cur'] = named[0]['i']
             return offer(st, named[0], dt, am)
         if am and len(opened) > 1 and kind == 'all':
-            return ask_amount_account(st, dt)
+            return ask_amount_account(st, dt, am)
         if am:
             st['all'] = False                       # an amount (with its date, if any) is taken product by product
             st['cur'] = 0
@@ -1171,7 +1201,7 @@ def turn_confirm(st, it, dt, am, pref):
     pick = None
     kind, ts = target_products(st, pref)
     if kind == 'ambig':
-        return ask_which(st, ts)
+        return ask_which(st, ts, dt, am)
     for p in ts:
         if p['status'] == 'agreed':
             pick = p
@@ -1180,7 +1210,7 @@ def turn_confirm(st, it, dt, am, pref):
         pick = agreed[0]
     if it in ('offer', 'change') and kind == 'all' and len(agreed) > 1:
         if am:
-            return ask_amount_account(st, dt)
+            return ask_amount_account(st, dt, am)
         if dt:
             return confirm_all_date(st, dt)
     if it in ('offer', 'change') and pick is not None:
