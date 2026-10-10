@@ -10,7 +10,7 @@ Status values: free / claimed / in-progress / blocked / done. Times are UTC. Edi
 | 02 Brief A x3, A+B x3, styles, hard scripts | tasks/02-robustness-runs.md | yes | fixes only | 01 | claude-inan | done (PR #4 merged) | 2026-10-10T17:48Z | task/02-identity-in-parts | 2026-10-10T18:46Z |
 | 03 real build.py --selftest + trace review | tasks/03-selftest-and-trace.md | yes | no | 01 (agent must run) | | free | | | |
 | 04 real Brief D sim via tunnel + mock bank | tasks/04-brief-d-real-sim.md | yes | fixes only | 01 | | free | | | |
-| 05 wire briefs F/G/H into local_sim.py | tasks/05-local-sim-fgh.md | no | `local_sim.py` only | none | claude-kutay | in-progress (F,G wired; H blocked on parser) | 2026-10-10T16:10Z | main | 2026-10-10T16:30Z |
+| 05 wire briefs F/G/H into local_sim.py | tasks/05-local-sim-fgh.md | no | `local_sim.py` only | none | claude-kutay | done | 2026-10-10T16:10Z | main | 2026-10-10T16:30Z |
 | 06 spec gaps A42, A47, A35, A26, transfer-after-promise, B9/B10 | tasks/06-spec-gaps.md | no | yes (ecfg, engine_lib, parse) | none | claude-inan | done (PR #1 merged) | 2026-10-10T16:54Z | task/06-spec-gaps | 2026-10-10T17:41Z |
 | 07 guard against repeating last line after engine failure | tasks/07-engine-failure-guard.md | no | yes (engine_lib, generate.py) | after 06 | claude-inan | done (PR #2 merged) | 2026-10-10T16:57Z | task/07-engine-failure-guard | 2026-10-10T17:41Z |
 | 08 fresh-clone dry run on A and D, timed | tasks/08-fresh-clone-run.md | no (workflow save only) | no | 05, 06, 07 merged | | free | | | |
