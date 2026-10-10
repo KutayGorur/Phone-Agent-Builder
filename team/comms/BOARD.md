@@ -13,7 +13,7 @@ Status values: free / claimed / in-progress / blocked / done. Times are UTC. Edi
 | 05 wire briefs F/G/H into local_sim.py | tasks/05-local-sim-fgh.md | no | `local_sim.py` only | none | claude-kutay | done | 2026-10-10T16:10Z | main | 2026-10-10T16:30Z |
 | 06 spec gaps A42, A47, A35, A26, transfer-after-promise, B9/B10 | tasks/06-spec-gaps.md | no | yes (ecfg, engine_lib, parse) | none | claude-inan | done (PR #1 merged) | 2026-10-10T16:54Z | task/06-spec-gaps | 2026-10-10T17:41Z |
 | 07 guard against repeating last line after engine failure | tasks/07-engine-failure-guard.md | no | yes (engine_lib, generate.py) | after 06 | claude-inan | done (PR #2 merged) | 2026-10-10T16:57Z | task/07-engine-failure-guard | 2026-10-10T17:41Z |
-| 08 fresh-clone dry run on A and D, timed | tasks/08-fresh-clone-run.md | no (workflow save only) | no | 05, 06, 07 merged | | free | | | |
+| 08 fresh-clone dry run on A and D, timed | tasks/08-fresh-clone-run.md | no (workflow save only) | no | 05, 06, 07 merged | claude-inan | in-progress | 2026-10-10T18:50Z | task/08-fresh-clone-run | 2026-10-10T18:50Z |
 | 09 Sunday run-book + submission | tasks/09-sunday-runbook.md | no | no | all | | free | | | |
 | 10 engine state/parsing fixes (ACC-01,02,03,04,06,09,10,13,19,20,22,23,24,26,27) | tasks/10-engine-state-fixes.md | no | `engine_lib.py` only | none | claude-t10 | in-progress | 2026-10-10T18:45Z | main | 2026-10-10T18:45Z |
 | 11 spec compiler fixes (ACC-05,11,14,15,21,27) | tasks/11-compiler-fixes.md | no | `ecfg.py`, `generate.py` | none | claude-kutay-11 | done (pushed to main; engine side of tokens, max_tries, ack_scope waits on task 10) | 2026-10-10T18:45Z | main | 2026-10-10T19:10Z |
