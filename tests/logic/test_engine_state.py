@@ -127,5 +127,112 @@ class Parsing(unittest.TestCase):
         self.assertNotIn('cb_date', v)
 
 
+class Scope(unittest.TestCase):
+    def test_acc02_unique_match(self):
+        ns = ns_for()
+        st = {'all': False, 'cur': 0, 'prods': [
+            {'i': 0, 'type': 'personal_loan', 'label': 'personal loan', 'status': 'open'},
+            {'i': 1, 'type': 'car_loan', 'label': 'car loan', 'status': 'open'}]}
+        t = ns['target_products']
+        kind, ps = t(st, 'car loan')
+        self.assertEqual((kind, [x['i'] for x in ps]), ('one', [1]))
+        kind, ps = t(st, 'the personal loan please')
+        self.assertEqual((kind, [x['i'] for x in ps]), ('one', [0]))
+        self.assertEqual(t(st, 'loan')[0], 'ambig')
+        self.assertEqual(t(st, 'both')[0], 'all')
+        self.assertEqual(t(st, '')[0], 'none')
+
+    def test_acc02_ambiguous_name_asks(self):
+        p = Probe().say('refuse')
+        before = json.dumps(p.st['prods'])
+        p.say('offer', date='tomorrow', amount='250', product='loan')
+        self.assertEqual(p.v['route'], 'say')
+        self.assertIn('Which one do you mean', p.text)
+        self.assertEqual(json.dumps(p.st['prods']), before)
+
+    def test_acc20_named_product_gets_the_offer(self):
+        p = Probe().say('refuse')                                       # product 1 (personal loan) in play
+        p.say('offer', date='tomorrow', amount='250', product='car loan')
+        self.assertEqual(p.prod(1)['status'], 'agreed')
+        self.assertEqual((p.prod(1)['amt'], p.prod(1)['date']), (250.0, '2026-10-15'))
+        self.assertNotEqual(p.prod(0)['status'], 'agreed')
+
+    def test_acc03_all_correction_moves_every_product(self):
+        p = Probe().say('agree')                                         # both at full amount today
+        self.assertEqual(p.st['phase'], 'confirm')
+        p.say('change', date='friday', product='all')
+        self.assertEqual([x['date'] for x in p.st['prods']], ['2026-10-16', '2026-10-16'])
+        self.assertEqual([x['amt'] for x in p.st['prods']], [300.0, 500.0])
+        self.assertEqual(p.st['phase'], 'confirm')
+
+    def test_acc04_all_with_amount_and_date_asks_which_account(self):
+        p = Probe().say('offer', date='tomorrow', amount='150', product='all')
+        self.assertEqual(p.v['route'], 'say')
+        self.assertIn('Which account', p.text)
+        self.assertEqual([x['status'] for x in p.st['prods']], ['open', 'open'])
+        p.say('offer', amount='250', product='car loan')                 # the date given earlier is not lost
+        self.assertEqual((p.prod(1)['amt'], p.prod(1)['date']), (250.0, '2026-10-15'))
+
+    def test_acc04_amount_and_date_without_scope_are_both_kept(self):
+        p = Probe().say('offer', date='tomorrow', amount='200')
+        self.assertEqual((p.prod(0)['amt'], p.prod(0)['date']), (200.0, '2026-10-15'))
+
+
+class ProposalState(unittest.TestCase):
+    def test_acc01_amount_then_date(self):
+        p = Probe().say('refuse')
+        p.say('offer', amount='200')
+        self.assertEqual(p.prod(0)['pend']['a'], 200.0)
+        p.say('offer', date='tomorrow')
+        self.assertEqual((p.prod(0)['amt'], p.prod(0)['date']), (200.0, '2026-10-15'))
+
+    def _readback(self):
+        p = Probe().say('offer', date='friday', amount='200', product='personal loan')
+        p.say('offer', date='friday', amount='400', product='car loan')
+        self.assertEqual(p.st['phase'], 'confirm')
+        return p
+
+    def test_acc01_readback_amount_only_keeps_date(self):
+        p = self._readback()
+        p.say('change', amount='450', product='car loan')
+        self.assertEqual((p.prod(1)['amt'], p.prod(1)['date']), (450.0, '2026-10-16'))
+
+    def test_acc01_readback_date_only_keeps_amount(self):
+        p = self._readback()
+        p.say('change', date='tomorrow', product='car loan')
+        self.assertEqual((p.prod(1)['amt'], p.prod(1)['date']), (400.0, '2026-10-15'))
+
+    def test_acc09_hardship_with_offer_is_kept_after_declining_support(self):
+        p = Probe().say('refuse')
+        p.say('sp_hardship', date='tomorrow', amount='200')
+        self.assertTrue(p.st.get('hard_pending'))
+        p.say('refuse')                                                  # no thanks to the support team
+        self.assertEqual((p.prod(0)['status'], p.prod(0)['amt'], p.prod(0)['date']), ('agreed', 200.0, '2026-10-15'))
+
+    def test_acc10_callback_day_kept_across_turns(self):
+        v = {'now': NOW, 'st': json.dumps({'phase': 'tp'}), 'tp_event': 'callback', 'tp_date': 'tomorrow', 'tp_time': ''}
+        code = engine_code(build_E(spec('ab')))
+        exec(compile(code, '<engine>', 'exec'), {'vars': v})
+        self.assertEqual(v['route'], 'tp_say')
+        v.update(tp_event='callback', tp_date='', tp_time='three pm')
+        exec(compile(code, '<engine>', 'exec'), {'vars': v})
+        self.assertEqual((v.get('route'), v.get('cb_date'), v.get('cb_time')), ('callback', '2026-10-15', '15:00'))
+
+    def test_acc19_stop_at_readback_notes_agreed_products(self):
+        p = Probe().say('agree')
+        self.assertEqual(p.st['phase'], 'confirm')
+        p.say('sp_does_not_want_to_talk')
+        p.say('sp_does_not_want_to_talk')
+        seen = []
+        for _ in range(4):
+            if p.v['route'] != 'note':
+                break
+            seen.append((p.v['nt_pid'], p.v['nt_reason']))
+            p.v['nt_ok'] = 'true'
+            p.run()
+        self.assertEqual(seen, [('p1', 'refused'), ('p2', 'refused')])
+        self.assertEqual(p.v['route'], 'fin')
+
+
 if __name__ == '__main__':
     unittest.main()

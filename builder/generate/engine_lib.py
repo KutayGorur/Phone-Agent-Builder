@@ -710,6 +710,13 @@ def offer(st, p, dt, am, lead=''):
     """The customer proposes a date and/or an amount for product p."""
     today = today_d()
     pre = (lead + ' ') if lead else ''
+    if not dt and st.get('sd'):
+        dt = st['sd']                             # a date given earlier for "all of them", now with its account
+    st['sd'] = ''
+    pe = p.get('pend') or {}
+    carried_a = pe.get('a') if pe.get('k') in ('day', 'adj', 'edit') else None   # what the customer already put forward
+    if pe.get('k') == 'edit' and pe.get('d') and am and not dt:
+        dt = pe['d']                              # an agreed date stays when only the amount is changed
     amt = None
     below = False
     if am:
@@ -727,7 +734,7 @@ def offer(st, p, dt, am, lead=''):
                 amt = p['pd']
             else:
                 amt = round(a, 2)
-    use_amt = amt if amt is not None else def_amt(p)
+    use_amt = amt if amt is not None else (carried_a if carried_a else def_amt(p))
     d = None
     flag = ''
     req = None
@@ -779,23 +786,41 @@ def hardship_offer_text():
     return 'Would you like me to connect you with our %s?' % qn
 
 
-def target_products(st, pref, scope_all=False):
+_STOPW = ('the', 'and', 'for', 'with', 'ending', 'end', 'one')
+
+
+def _keys(p):
+    toks = re.findall(r'[a-z]+|\d+', (p['type'] + ' ' + p['label']).lower())
+    return set(x for x in toks if x not in _STOPW and (len(x) >= 3 or x.isdigit()))
+
+
+def target_products(st, pref):
+    """-> (kind, products). kind: 'all' | 'one' (a unique match) | 'ambig' (several match equally) | 'none'
+    (nothing named: the products in play)."""
     prods = st['prods']
-    if scope_all:
-        return [p for p in prods if p['status'] in ('open', 'agreed')]
-    w = str(pref or '').lower()
+    w = str(pref or '').lower().strip()
     if w:
         if re.search(r'\b(all|both|every|each|everything)\b', w):
-            return [p for p in prods if p['status'] in ('open', 'agreed')]
-        for p in prods:
-            keys = [x for x in re.findall(r'[a-z]+', (p['type'] + ' ' + p['label']).lower()) if len(x) > 3]
-            if any(k in w for k in keys):
-                return [p]
+            return 'all', [p for p in prods if p['status'] in ('open', 'agreed')]
+        words = set(re.findall(r'[a-z]+|\d+', w))
+        words |= set(x[:-1] for x in words if x.endswith('s') and len(x) > 3)
+        cands = [p for p in prods if _keys(p) & words]
+        if cands:
+            def wt(k):
+                return 1.0 / sum(1 for q in prods if k in _keys(q))
+            sc = dict((p['i'], sum(wt(k) for k in _keys(p) & words)) for p in cands)
+            top = max(sc.values())
+            best = [p for p in cands if sc[p['i']] >= top - 1e-9]
+            return ('one' if len(best) == 1 else 'ambig'), best
     opened = [p for p in prods if p['status'] == 'open']
     if st['all'] and len(opened) > 1:
-        return opened
-    cur = prods[st['cur']]
-    return [cur]
+        return 'none', opened
+    return 'none', [prods[st['cur']]]
+
+
+def ask_which(st, cands):
+    """Several products fit what the customer named: ask, change nothing."""
+    speak('Which one do you mean: %s?' % ' or '.join(p['label'] for p in cands))
 
 
 def do_transfer(st, queue, outcome, reason, text=''):
@@ -822,7 +847,7 @@ def special(st, it, pref):
         if st['quit'] >= int(I.get('max') or 2):
             cv = I.get('close_verified') or E['exhausted']
             for p in st['prods']:
-                if p['status'] == 'open':
+                if p['status'] in ('open', 'agreed'):          # agreed but never recorded: the bank must still hear why
                     note_product(p, cv.get('reason') or E['exhausted']['reason'])
             conclude(st, 'I understand.')
             return True
@@ -837,7 +862,10 @@ def special(st, it, pref):
         do_transfer(st, I['queue'], I['close']['outcome'], I['close'].get('reason'), text)
         return True
     if kind in ('note', 'close'):
-        ts = target_products(st, pref)
+        kind, ts = target_products(st, pref)
+        if kind == 'ambig':
+            ask_which(st, ts)
+            return True
         reason = I['note_reason']
         if E['use_notes'] and I.get('continues'):
             for p in ts:
@@ -869,6 +897,7 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
     if it == 'agree':
         acc = I.get('on_accept') or {}
         st['hard_pending'] = False
+        st['hs'] = None
         do_transfer(st, acc.get('queue'), (acc.get('close') or {}).get('outcome') or E['out']['r_transfer'],
                     (acc.get('close') or {}).get('reason'), 'I am connecting you now.')
         return True
@@ -880,6 +909,13 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
         return True
     dec = I.get('on_decline') or {}
     st['hard_pending'] = False
+    hs, st['hs'] = st.get('hs'), None
+    if hs:                                        # they offered a payment along with the hardship: that offer stands
+        kind, ts = target_products(st, hs.get('pref'))
+        p = ts[0] if kind in ('one', 'none') else st['prods'][st['cur']]
+        st['cur'] = p['i']
+        st['all'] = False
+        return offer(st, p, hs.get('dt'), hs.get('am'), 'I understand.') or True
     reason = dec.get('reason') or E['exhausted']['reason']
     for p in st['prods']:
         if p['status'] in ('open',):
@@ -913,10 +949,19 @@ def turn_inner(st):
     if not it:
         it = 'none'
     prods = st['prods']
-    scope_all = bool(re.search(r'\b(all|both|every|each|everything)\b', pref.lower())) if pref else False
+    scope_all = False
+    if it not in ('offer', 'change'):
+        st['sd'] = ''
     if st.get('hard_pending') and st['phase'] == 'nego':
+        hs = st.get('hs')
+        if hs and it in ('offer', 'change') and not dt and not am:
+            dt, am, pref = hs.get('dt') or '', hs.get('am') or '', hs.get('pref') or pref
+        if it in ('offer', 'change'):
+            st['hs'] = None
         if hardship_reply(st, it, dt, am, pref, scope_all):
             return
+    if it == E['hard'] and (dt or am) and not st.get('hard_pending'):
+        st['hs'] = {'dt': dt, 'am': am, 'pref': pref}      # a payment offered together with the hardship is kept
     if it in E['intents']:
         if special(st, it, pref):
             return
@@ -943,8 +988,58 @@ def turn_inner(st):
         p['tm'] = True
         return refusal(st, p)
     if it in ('offer', 'change'):
+        kind, ts = target_products(st, pref)
+        if kind == 'ambig':
+            return ask_which(st, ts)
+        if kind == 'one' and ts[0]['i'] != p['i'] and ts[0]['status'] == 'open':
+            st['cur'] = ts[0]['i']                # the customer named another product: the offer is for that one
+            p = ts[0]
+        elif kind == 'all' and len(ts) > 1 and any(q['status'] == 'open' and q['i'] != p['i'] for q in ts):
+            if am:
+                return ask_amount_account(st, dt)
+            if dt:
+                r = all_date(st, dt)
+                if r is not None:
+                    return r
         return offer(st, p, dt, am)
     return reask(st)
+
+
+def ask_amount_account(st, dt):
+    """An amount for "all of them" cannot be split by guessing: keep the date, ask which account the amount is for."""
+    st['sd'] = dt or ''
+    speak('Which account is that amount for?')
+
+
+def all_date(st, dt):
+    """One date for every open product, each at its default amount. None when the words are not a date at all."""
+    today = today_d()
+    kind, dd = free_date(dt, today)
+    if kind == 'vague' and not st['vg_all']:
+        st['vg_all'] = 1
+        return speak('Which exact day can you pay? Please give me a date.') or True
+    if kind not in ('vague', 'date'):
+        return None
+    bad_past = False
+    res = []
+    for q in st['prods']:
+        if q['status'] != 'open':
+            continue
+        if kind == 'vague':
+            if q['dead']:
+                res.append((q, def_amt(q), from_iso(q['dead']), 'late'))
+            continue
+        s, f = check_day(q, dd, today)
+        if s == 'past':
+            bad_past = True
+            break
+        res.append((q, def_amt(q), f, 'late' if s == 'late' else ''))
+    if bad_past:
+        return speak('That day has already passed. Which day, starting today, can you pay?') or True
+    for q, a, f, cap in res:
+        accept(q, a, f, cap)
+    st['all'] = False
+    return finish_nego(st) or True
 
 
 def turn_all(st, it, dt, am, pref):
@@ -967,42 +1062,49 @@ def turn_all(st, it, dt, am, pref):
         intro = "Let's go through them one by one."
         return refusal(st, p0, intro + ' Your %s.' % p0['label'])
     if it in ('offer', 'change'):
-        named = target_products(st, pref)
-        if pref and len(named) == 1 and len([q for q in prods if q['status'] == 'open']) > 1:
+        kind, named = target_products(st, pref)
+        opened = [q for q in prods if q['status'] == 'open']
+        if kind == 'ambig':
+            return ask_which(st, named)
+        if kind == 'one' and len(opened) > 1:
             st['all'] = False
             st['cur'] = named[0]['i']
             return offer(st, named[0], dt, am)
-        if dt:
-            kind, dd = free_date(dt, today)
-            if kind == 'vague' and not st['vg_all']:
-                st['vg_all'] = 1
-                return speak('Which exact day can you pay? Please give me a date.')
-            if kind in ('vague', 'date'):
-                bad_past = False
-                res = []
-                for p in prods:
-                    if p['status'] != 'open':
-                        continue
-                    if kind == 'vague':
-                        if p['dead']:
-                            res.append((p, def_amt(p), from_iso(p['dead']), 'late'))
-                        continue
-                    s, f = check_day(p, dd, today)
-                    if s == 'past':
-                        bad_past = True
-                        break
-                    res.append((p, def_amt(p), f, 'late' if s == 'late' else ''))
-                if bad_past:
-                    return speak('That day has already passed. Which day, starting today, can you pay?')
-                for p, a, f, cap in res:
-                    accept(p, a, f, cap)
-                st['all'] = False
-                return finish_nego(st)
+        if am and len(opened) > 1 and kind == 'all':
+            return ask_amount_account(st, dt)
         if am:
-            st['all'] = False
+            st['all'] = False                       # an amount (with its date, if any) is taken product by product
             st['cur'] = 0
-            return offer(st, prods[0], '', am)
+            return offer(st, prods[0], dt, am)
+        if dt:
+            r = all_date(st, dt)
+            if r is not None:
+                return r
     return reask(st)
+
+
+def confirm_all_date(st, dt):
+    """At the read-back: one new date for every agreed product, amounts kept."""
+    today = today_d()
+    kind, dd = free_date(dt, today)
+    if kind != 'date':
+        return speak('Which exact day can you pay? Please give me a date.')
+    agreed = [q for q in st['prods'] if q['status'] == 'agreed']
+    res = []
+    for q in agreed:
+        s, f = check_day(q, dd, today)
+        if s == 'past':
+            return speak('That day has already passed. Which day, starting today, can you pay?')
+        res.append((q, f, s))
+    for q, f, s in res:
+        q['date'] = iso(f)
+        q['cap'] = 'late' if s == 'late' else ''
+    notes = []
+    if any(s == 'late' for q, f, s in res):
+        notes.append('Some of those dates are later than I can record, so I used the latest date I can.')
+    if any(s == 'moved' for q, f, s in res):
+        notes.append('Some days are not business days, so I used the next date I can record.')
+    return speak(' '.join(['Of course.'] + notes + [readback(st)]))
 
 
 def turn_confirm(st, it, dt, am, pref):
@@ -1014,20 +1116,27 @@ def turn_confirm(st, it, dt, am, pref):
         st['tries'] = 0
         return set_create(st)
     pick = None
-    ts = target_products(st, pref)
+    kind, ts = target_products(st, pref)
+    if kind == 'ambig':
+        return ask_which(st, ts)
     for p in ts:
         if p['status'] == 'agreed':
             pick = p
             break
     if pick is None and agreed:
         pick = agreed[0]
+    if it in ('offer', 'change') and kind == 'all' and len(agreed) > 1:
+        if am:
+            return ask_amount_account(st, dt)
+        if dt:
+            return confirm_all_date(st, dt)
     if it in ('offer', 'change') and pick is not None:
         pick['status'] = 'open'
-        pick['pend'] = None
+        pick['pend'] = {'a': pick['amt'], 'd': pick['date'], 'k': 'edit'}   # what was agreed stays unless changed
         st['cur'] = pick['i']
         st['phase'] = 'nego'
         if not dt and not am:
-            pick['pend'] = {'a': def_amt(pick), 'd': None, 'k': 'day'}
+            pick['pend'] = {'a': pick['amt'], 'd': None, 'k': 'day'}
             return speak('Of course. Which day or amount would you like instead?')
         return offer(st, pick, dt, am, 'Of course.')
     if it in ('refuse', 'too_much', 'evasive') and pick is not None:
@@ -1165,6 +1274,10 @@ def tp_turn(st):
         kind, dd = free_date(dt, today)
         if kind == 'date':
             d = dd
+    if d is None and not dt and st.get('tp_d'):
+        d = from_iso(st['tp_d'])                  # the day they gave earlier still stands
+    if d is not None:
+        st['tp_d'] = iso(d)
     if d is None and t_cands and not dt:
         nb = next_bd(today, CAL)
         d = today
@@ -1185,6 +1298,7 @@ def tp_turn(st):
             st['phase'] = 'cb'
             st['tries'] = 0
             return route('callback')
+        st['tp_d'] = ''                           # that day and time did not work: ask for both again
         if st['tp_bad'] < int(tp.get('max_bad') or 1):
             st['tp_bad'] += 1
             vars['instruction'] = ('Say that unfortunately that time is not possible; you can call back ' + tp['window_text'] +
