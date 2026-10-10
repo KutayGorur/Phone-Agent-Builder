@@ -7,7 +7,7 @@ Everything runs inside a hard time budget (the event allows 30 minutes per brief
 the output (out/<stem>.workflow.json) and the Freya slot. A trace goes to traces/<stem>-<time>.trace.txt.
 Needs FREYA_API_KEY and FREYA_BANK_TEAM_KEY (source env.sh).
 """
-import argparse, concurrent.futures, json, pathlib, re, subprocess, sys, time, traceback
+import argparse, json, os, pathlib, re, subprocess, sys, tempfile, threading, time, traceback
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -38,15 +38,78 @@ def stub_generate(spec):
 
 
 def _run_limited(fn, args, seconds, what):
-    """Run fn(*args) but stop waiting after `seconds`; a timed-out call is abandoned."""
-    ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    fut = ex.submit(fn, *args)
+    """Run fn(*args) in a daemon thread and stop waiting after `seconds`. The thread cannot be killed, but being a
+    daemon it never keeps the interpreter alive; main() ends with os._exit."""
+    box = {}
+    def work():
+        try:
+            box["v"] = fn(*args)
+        except BaseException as e:  # noqa: BLE001
+            box["e"] = e
+    th = threading.Thread(target=work, daemon=True, name=what)
+    th.start()
+    th.join(max(seconds, 1))
+    if th.is_alive():
+        raise TimeoutError(f"{what} exceeded its time slice of {seconds:.0f}s")
+    if "e" in box:
+        raise box["e"]
+    return box["v"]
+
+
+_CHILD = """
+import json, sys, traceback
+sys.path.insert(0, sys.argv[1])
+from builder import trace as tr
+tr.set_current(tr.Trace(sys.argv[5] or None, echo=True))
+mod, _, name = sys.argv[2].partition(":")
+out = sys.argv[4]
+try:
+    fn = getattr(__import__(mod, fromlist=[name]), name)
+    spec = fn(*json.loads(sys.argv[3]))
+    open(out, "w", encoding="utf-8").write(json.dumps({"spec": spec}, ensure_ascii=False))
+except BaseException as e:
+    open(out, "w", encoding="utf-8").write(json.dumps({"error": repr(e), "tb": traceback.format_exc()}))
+    sys.exit(1)
+"""
+
+
+def run_parse_subprocess(target, args, seconds, trace_path=None):
+    """Run `module:function` in a child process that is killed when the time slice ends."""
+    fd, out = tempfile.mkstemp(suffix=".json", prefix="parse-"); os.close(fd)
+    p = subprocess.Popen([sys.executable, "-c", _CHILD, str(ROOT), target, json.dumps(args), out, str(trace_path or "")], cwd=ROOT)
     try:
-        return fut.result(timeout=max(seconds, 1))
-    except concurrent.futures.TimeoutError:
-        raise TimeoutError(f"{what} exceeded its time slice of {seconds:.0f}s") from None
+        try:
+            p.wait(timeout=max(seconds, 1))
+        except subprocess.TimeoutExpired:
+            p.kill(); p.wait()
+            raise TimeoutError(f"parse exceeded its time slice of {seconds:.0f}s; child process killed") from None
+        try:
+            res = json.loads(pathlib.Path(out).read_text(encoding="utf-8"))
+        except Exception:
+            raise RuntimeError(f"parse child exited with code {p.returncode} and no result") from None
+        if "error" in res:
+            raise RuntimeError(f"parse failed: {res['error']}")
+        return res["spec"]
     finally:
-        ex.shutdown(wait=False, cancel_futures=True)
+        try: os.unlink(out)
+        except OSError: pass
+
+
+def readiness_problems(spec):
+    """Reasons a spec is not trustworthy: parser flags plus minimum content (identity questions, closing outcomes, calendar)."""
+    probs, par = [], spec.get("parser") or {}
+    if par.get("degraded"):
+        probs.append("parser degraded: " + str(par.get("reason", "no reason given"))[:200])
+    if par.get("unresolved_errors"):
+        probs.append(f"{len(par['unresolved_errors'])} unresolved parser error(s)")
+    ident, closing, cal = spec.get("identity"), spec.get("closing"), spec.get("calendar")
+    if not (isinstance(ident, dict) and ident.get("questions")):
+        probs.append("no identity questions")
+    if not (isinstance(closing, dict) and closing.get("outcomes")):
+        probs.append("no closing outcomes")
+    if not (isinstance(cal, dict) and cal):
+        probs.append("no calendar")
+    return probs
 
 
 def parse_results(text):
@@ -108,6 +171,7 @@ def main(argv=None):
     ap.add_argument("--spec-file", default=None, help="development: skip parse and use this spec.json")
     ap.add_argument("--dry-run", action="store_true", help="parse + generate only; no Freya calls, no credits; writes out/<stem>.workflow.json")
     ap.add_argument("--run-cases-cmd", default=None, help=argparse.SUPPRESS)
+    ap.add_argument("--parse-target", default="builder.parse:parse", help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
     if len(a.files) < 2:
         ap.error("need at least one brief and the tool API file")
@@ -118,6 +182,13 @@ def main(argv=None):
     t0 = time.time()
     deadline = t0 + min(a.budget_min * 60, HARD_LIMIT_S - 60)
     left = lambda: deadline - time.time()
+    hard = t0 + HARD_LIMIT_S - 15
+
+    def watchdog():   # last resort: the process ends before the event's 30 minutes whatever is still running
+        t.error("hard time limit reached, aborting process")
+        t.end("timeout", workflow_id=workflow_id, output=out_path)
+        os._exit(3)
+    wd = threading.Timer(max(hard - time.time(), 1), watchdog); wd.daemon = True; wd.start()
     t.start(briefs=",".join(briefs), tool_api=tool_api, budget_s=int(left()), selftest=a.selftest)
     status, workflow_id, out_path = "failed", None, None
     try:
@@ -126,11 +197,17 @@ def main(argv=None):
             spec = json.loads(pathlib.Path(a.spec_file).read_text(encoding="utf-8"))
             t.note(f"parse skipped: spec loaded from {a.spec_file}")
         else:
-            parse = _load("parse", "parse") or stub_parse
-            spec = _run_limited(parse, (briefs, tool_api), left() * 0.35, "parse")
+            if _load("parse", "parse") or a.parse_target != "builder.parse:parse":
+                spec = run_parse_subprocess(a.parse_target, [list(briefs), tool_api], left() * 0.35, t.path)
+            else:
+                spec = stub_parse(briefs, tool_api)
         out_dir = pathlib.Path(a.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{stem}.spec.json").write_text(json.dumps(spec, indent=1, ensure_ascii=False), encoding="utf-8")
         t.note(f"spec written to {out_dir / (stem + '.spec.json')}")
+        problems = readiness_problems(spec)
+        if problems:
+            status = "degraded"
+            t.error("spec not ready, build will be labelled degraded: " + "; ".join(problems))
 
         # generate; fall back to the example workflow so something valid is always exported
         t.stage("generate")
@@ -148,7 +225,7 @@ def main(argv=None):
             if a.selftest:
                 t.selftest(f"dry run: would run run_cases on {','.join(pick_cases(a.selftest_cases, a.selftest_brief, a.selftest_max))}")
             status = status if status == "degraded" else "ok"
-            return 0
+            return 0 if out_path else 1
         import freya
         t.stage("freya save")
         try:
@@ -198,9 +275,12 @@ def main(argv=None):
         t.error(f"{e!r}")
         t.error(traceback.format_exc().replace("\n", " | "))
     finally:
+        wd.cancel()
         t.end(status, workflow_id=workflow_id, output=out_path)
     return 0 if status in ("ok", "degraded") and out_path else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    code = main()
+    sys.stdout.flush(); sys.stderr.flush()
+    os._exit(code)   # abandoned worker threads must not hold the process past the limit

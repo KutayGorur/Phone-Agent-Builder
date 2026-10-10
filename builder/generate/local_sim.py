@@ -137,6 +137,8 @@ WRONG = {
     'PUB-03': [('date_of_birth', '12 July 1991'), ('date_of_birth', '21 August 1992'), ('date_of_birth', '21 July 1990')],
     'TC-03': [('date_of_birth', '5 July 1991'), ('date_of_birth', '5 June 1991'), ('postcode', '7001'), ('postcode', '7002')],
     'TF-03': [('membership_year', '2001'), ('membership_year', '2002')],
+    'TG-03': [('membership_year', str(y)) for y in range(2001, 2006)],
+    'TH-03': [('membership_year', str(y)) for y in range(2001, 2005)],
     'TE-05': [('date_of_birth', '12 May 1980'), ('date_of_birth', '13 May 1980'), ('date_of_birth', '14 May 1980'), ('date_of_birth', '15 May 1980'),
               ('postcode', '4200'), ('postcode', '4201'), ('postcode', '4202'), ('postcode', '4203')],
 }
@@ -167,6 +169,20 @@ VARIANTS = {
           'TF-05': [I('offer', x_date='Wednesday 16 December'), I('offer', x_amount='72', x_date='Wednesday 16 December'), I('agree'), I('agree')],
           'TF-06': [I('refuse'), I('refuse'), I('refuse')],
           'TF-08': [I('restructuring')]},
+    'g': {'TG-01': [I('agree'), I('agree')],
+          'TG-02': [TP('other'), TP('gives_time', 'tomorrow', 'eleven fifteen in the morning')],
+          'TG-03': 'identity',
+          'TG-04': [I('hardship'), I('refuse')],
+          'TG-05': [I('offer', x_date='Wednesday 20 January'), I('offer', x_amount='72', x_date='Wednesday 20 January'), I('agree'), I('agree')],
+          'TG-06': [I('offer', x_date='tomorrow', x_product='card'), I('agree'), I('refuse'), I('refuse'), I('refuse')],
+          'TG-08': [I('restructuring')]},
+    'h': {'TH-01': [I('agree'), I('agree')],
+          'TH-02': [TP('other'), TP('gives_time', 'tomorrow', 'nine forty-five in the morning')],
+          'TH-03': 'identity',
+          'TH-04': [I('hardship'), I('refuse')],
+          'TH-05': [I('offer', x_date='Wednesday 10 February'), I('offer', x_amount='72', x_date='Wednesday 10 February'), I('agree'), I('agree')],
+          'TH-06': [I('offer', x_date='tomorrow', x_product='card'), I('agree'), I('refuse'), I('refuse'), I('refuse')],
+          'TH-08': [I('restructuring')]}
 }
 
 

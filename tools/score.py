@@ -27,6 +27,9 @@ def score_ledger(case, led):
     if sorted(t["queue"] for t in led["transfers"]) != sorted(t["queue"] for t in exp["transfers"]): bad.append(f"transfers {led['transfers']}, expected {exp['transfers']}")
     calls = led["calls"]
     if not calls or calls[-1]["tool"] != "close_call": bad.append("the call was not closed with close_call")
+    closes = [c for c in calls if c["tool"] == "close_call"]
+    if len(closes) > 1: bad.append(f"close_call attempted {len(closes)} times, expected exactly one")
+    elif closes and (closes[0].get("result") or {}).get("ok") is False: bad.append("close_call did not succeed")
     # policy from the ledger: tools the brief forbids before identity is verified
     for c in calls:
         if c["tool"] in ("get_account", "create_promise") and c["result"].get("error") == "identity not verified": bad.append(f"{c['tool']} called before identity was verified"); break

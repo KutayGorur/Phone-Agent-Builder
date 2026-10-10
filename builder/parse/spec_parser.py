@@ -236,6 +236,11 @@ def parse(brief_paths, tool_api_path):
                 break
 
         errors, warnings = validate_mod.validate(spec, all_units, tools)
+        spec, quarantined = _quarantine(spec, all_units, validate_mod.shape_errors(spec))
+        if quarantined:
+            _note(f"sections degraded to extra_rules: {quarantined}")
+            errors, warnings = validate_mod.validate(spec, all_units, tools)
+            warnings = [f"section '{q}' stayed malformed after repair; its brief rules are kept as extra_rules" for q in quarantined] + warnings
         # uncovered units that survived every repair: keep their text verbatim as extra rules, never drop a rule
         cov = spec["rule_coverage"]
         for u in all_units:
@@ -253,6 +258,31 @@ def parse(brief_paths, tool_api_path):
                       "seconds": round(time.time() - t0), "unresolved_errors": errors, "warnings": warnings, "open_questions": questions}
     order = [k for k in spec if k not in ("tools_server", "tools", "extra_rules", "rule_coverage", "parser")] + ["tools_server", "tools", "extra_rules", "rule_coverage", "parser"]
     return {k: spec[k] for k in order}
+
+
+def _quarantine(spec, units, shape_errs):
+    """A section whose nested shape is still malformed is nulled and its brief rules fall back to extra_rules; the rest of the spec survives."""
+    bad = []
+    for e in shape_errs:
+        sec = re.split(r"[.\[ ]", e, maxsplit=1)[0]
+        if sec in spec and sec not in ("extra_rules", "rule_coverage") and sec not in bad:
+            bad.append(sec)
+    if not bad:
+        return spec, []
+    spec = copy.deepcopy(spec)
+    unit_text = {u["id"]: u["text"] for u in units}
+    for sec in bad:
+        spec[sec] = None
+    for uid, val in list(spec["rule_coverage"].items()):
+        parts = validate_mod.split_coverage(val)
+        if any(re.split(r"[.\[]", p, maxsplit=1)[0].strip() in bad for p in parts):
+            keep = [p for p in parts if re.split(r"[.\[]", p, maxsplit=1)[0].strip() not in bad]
+            if uid in unit_text:
+                spec["extra_rules"].append({"source": uid, "text": unit_text[uid]})
+                keep.append(f"extra_rules[{uid}]")
+            spec["rule_coverage"][uid] = "; ".join(keep) or f"extra_rules[{uid}]"
+    spec["extra_rules"] = _dedupe_rules(spec["extra_rules"])
+    return spec, bad
 
 
 def _for_prompt(spec):
