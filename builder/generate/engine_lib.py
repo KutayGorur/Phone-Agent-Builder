@@ -1,0 +1,1162 @@
+"""Dialogue engine for the generated phone agent. Runs inside ONE Freya code node.
+
+This file is appended to builder/logic/snippet_lib.py (calendar, bands, promise dates, callbacks,
+dates of birth) and the result is the `code` of the engine node. It is also imported by the local
+tests (builder/generate/local_sim.py), so the tested code is the shipped code.
+
+The model never decides policy. After every customer turn the extraction step fills a few variables
+(intent, date words, amount words); this engine reads them, updates the call state (one JSON string
+in vars['st']), and writes the next instruction for the speaking node plus a `route` that tells
+the graph where to go (speak, create a promise, add a note, transfer, close ...).
+
+Sandbox rules: no double braces anywhere in this file, nothing raises out of main().
+"""
+import json
+import re
+import datetime
+
+E = json.loads(__E__)
+CAL = E['cal']
+MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+               'September', 'October', 'November', 'December']
+
+
+# ------------------------------------------------------------------ small helpers
+
+def S(k):
+    v = vars.get(k)
+    return '' if v is None else str(v).strip()
+
+
+def money(x):
+    return '%.2f' % float(x)
+
+
+def today_d():
+    d, mins = parse_now(S('now'))
+    if d is None:
+        d, mins = parse_now(S('system.todays_date_tr.iso_8601'))
+    return d
+
+
+def now_min():
+    d, mins = parse_now(S('now'))
+    return mins
+
+
+def dstr(d):
+    t = today_d()
+    s = '%s %d %s' % (WD_NAMES[d.weekday()], d.day, MONTH_NAMES[d.month - 1])
+    if t is not None and d.year != t.year:
+        s += ' %d' % d.year
+    return s
+
+
+def iso(d):
+    return d.isoformat()
+
+
+def from_iso(s):
+    return parse_iso(s)
+
+
+# ------------------------------------------------------------------ number words, dates, times, amounts
+
+_UN = {'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8,
+       'nine': 9, 'ten': 10, 'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
+       'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19}
+_TN = {'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50, 'sixty': 60, 'seventy': 70, 'eighty': 80, 'ninety': 90}
+_OR = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5, 'sixth': 6, 'seventh': 7, 'eighth': 8,
+       'ninth': 9, 'tenth': 10, 'eleventh': 11, 'twelfth': 12, 'thirteenth': 13, 'fourteenth': 14,
+       'fifteenth': 15, 'sixteenth': 16, 'seventeenth': 17, 'eighteenth': 18, 'nineteenth': 19,
+       'twentieth': 20, 'thirtieth': 30}
+
+
+def _numval(w):
+    if w in _UN:
+        return _UN[w]
+    if w in _TN:
+        return _TN[w]
+    if w in _OR:
+        return _OR[w]
+    return None
+
+
+def digitize(text):
+    """'twenty-second of October' -> '22 of october'; 'four hundred and fifty five' -> '455'."""
+    toks = re.findall(r"[a-z]+|\d+(?:[.,]\d+)*|[^\sa-z\d]", str(text).lower())
+    out = []
+    i = 0
+    n = len(toks)
+    while i < n:
+        w = toks[i]
+        if _numval(w) is None and w not in ('hundred', 'thousand'):
+            out.append(w)
+            i += 1
+            continue
+        total = 0
+        cur = 0
+        prev = None
+        j = i
+        while j < n:
+            t = toks[j]
+            if t in ('and', '-'):
+                nxt = _numval(toks[j + 1]) if j + 1 < n else None
+                if prev in ('hundred', 'thousand') and nxt is not None:
+                    j += 1
+                    continue
+                if t == '-' and prev == 'tens' and nxt is not None and 1 <= nxt <= 9:
+                    j += 1
+                    continue
+                break
+            if t == 'hundred':
+                cur = (cur or 1) * 100
+                prev = 'hundred'
+                j += 1
+                continue
+            if t == 'thousand':
+                total += (cur or 1) * 1000
+                cur = 0
+                prev = 'thousand'
+                j += 1
+                continue
+            v = _numval(t)
+            if v is None:
+                break
+            if prev is None or prev in ('hundred', 'thousand'):
+                cur += v
+                prev = 'tens' if (v >= 20 and v % 10 == 0) else 'unit'
+                j += 1
+                continue
+            if prev == 'tens' and 1 <= v <= 9:
+                cur += v
+                prev = 'unit'
+                j += 1
+                continue
+            break
+        if j == i:
+            out.append(w)
+            i += 1
+            continue
+        out.append(str(total + cur))
+        i = j
+    return ' '.join(out)
+
+
+_MON_RE = '|'.join(sorted(MONTH_ALIASES.keys(), key=len, reverse=True))
+_VAGUE = re.compile(r'\b(next week|week after next|the week after|next month|end of (the )?(month|week|year)|month end|'
+                    r'salary|pay ?check|payday|pay day|soon|later|sometime|some time|when i can|few days|'
+                    r'couple of|a while|early next|beginning of|asap|whenever)\b')
+
+
+def _mk(y, m, dd):
+    try:
+        return datetime.date(y, m, dd)
+    except Exception:
+        return None
+
+
+def free_date(text, today):
+    """Words of a customer -> ('date', date) | ('vague', None) | ('none', None)."""
+    try:
+        t = digitize(text)
+        t = re.sub(r'(\d)\s*(st|nd|rd|th)\b', r'\1', t)
+        t = re.sub(r'\s+', ' ', t).strip()
+        if not t:
+            return 'none', None
+        m = re.search(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b', t)
+        if m:
+            d = _mk(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            if d:
+                return 'date', d
+        m = re.search(r'\b(\d{1,2}) ?(?:of |th of )?(' + _MON_RE + r')\b(?: ?,? ?(\d{4}))?', t)
+        if m:
+            return _month_day(int(m.group(1)), MONTH_ALIASES[m.group(2)], m.group(3), today)
+        m = re.search(r'\b(' + _MON_RE + r')\.? (\d{1,2})\b(?: ?,? ?(\d{4}))?', t)
+        if m:
+            return _month_day(int(m.group(2)), MONTH_ALIASES[m.group(1)], m.group(3), today)
+        m = re.search(r'\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b', t)
+        if m:
+            a, b = int(m.group(1)), int(m.group(2))
+            if str(CAL.get('dob_order') or 'DMY').upper() == 'MDY':
+                a, b = b, a
+            y = m.group(3)
+            if y and len(y) == 2:
+                y = str(2000 + int(y))
+            return _month_day(a, b, y, today)
+        m = re.search(r'\bin (\d{1,3}) (day|days|week|weeks)\b', t)
+        if m:
+            n = int(m.group(1)) * (7 if m.group(2).startswith('week') else 1)
+            return 'date', today + datetime.timedelta(days=n)
+        words = re.findall(r'[a-z]+', t)
+        has_wd = any(w in WD_ALIASES for w in words)
+        m = re.search(r'\b(?:the |on )(\d{1,2})\b', t) if has_wd else None
+        if m and 1 <= int(m.group(1)) <= 31:
+            return _dom(int(m.group(1)), today)
+        if 'day after tomorrow' in t:
+            return 'date', today + datetime.timedelta(days=2)
+        if has_wd or 'tomorrow' in words or 'today' in words:
+            st, d = resolve_phrase(t, today, CAL)
+            if st == 'ok':
+                return 'date', d
+        if re.search(r'\b(right now|now|asap)\b', t) and not _VAGUE.search(t.replace('asap', '')):
+            return 'date', today
+        if _VAGUE.search(t):
+            return 'vague', None
+        m = re.search(r'\b(\d{1,2})\b', t)
+        if m and 1 <= int(m.group(1)) <= 31:
+            return _dom(int(m.group(1)), today)
+        return 'vague', None
+    except Exception:
+        return 'none', None
+
+
+def _month_day(dd, mo, year, today):
+    if not (1 <= mo <= 12) or not (1 <= dd <= 31):
+        return 'vague', None
+    if year:
+        d = _mk(int(year), mo, dd)
+        return ('date', d) if d else ('vague', None)
+    d = _mk(today.year, mo, dd)
+    if d is None:
+        return 'vague', None
+    if d < today and (today - d).days > 150:
+        d = _mk(today.year + 1, mo, dd) or d
+    return 'date', d
+
+
+def _dom(dd, today):
+    y, mo = today.year, today.month
+    for _ in range(14):
+        d = _mk(y, mo, dd)
+        if d is not None and d >= today:
+            return 'date', d
+        mo += 1
+        if mo > 12:
+            mo = 1
+            y += 1
+    return 'vague', None
+
+
+def free_amount(text):
+    try:
+        t = str(text).lower()
+        m = re.search(r'\d[\d,]*(?:\.\d+)?', t)
+        if m:
+            return float(m.group(0).replace(',', ''))
+        d = digitize(t)
+        m = re.search(r'\d+(?:\.\d+)?', d)
+        if m:
+            return float(m.group(0))
+    except Exception:
+        pass
+    return None
+
+
+def free_time(text):
+    """Spoken time -> list of candidate minutes since midnight (am and pm when unclear)."""
+    try:
+        t = digitize(text)
+        t = re.sub(r'\s+', ' ', t).strip()
+        if re.search(r'\b(noon|midday)\b', t):
+            return [720]
+        ampm = None
+        if re.search(r'\b(a ?m|morning)\b', t):
+            ampm = 'am'
+        elif re.search(r'\b(p ?m|afternoon|evening|tonight)\b', t):
+            ampm = 'pm'
+        mi = 0
+        m = re.search(r'\b(\d{1,2}) ?[:.h] ?(\d{2})\b', t)
+        if m:
+            h, mi = int(m.group(1)), int(m.group(2))
+        else:
+            m = re.search(r'\b(\d{1,2})\b(?: (\d{2})\b)?', t)
+            if not m:
+                return []
+            h = int(m.group(1))
+            mi = int(m.group(2)) if m.group(2) else 0
+            if 'half past' in t or 'half ' + str(h) in t:
+                mi = 30
+            elif 'quarter past' in t:
+                mi = 15
+            elif 'quarter to' in t:
+                h -= 1
+                mi = 45
+        if h > 24 or mi > 59:
+            return []
+        if h >= 13:
+            return [h * 60 + mi]
+        if ampm == 'am':
+            return [(0 if h == 12 else h) * 60 + mi]
+        if ampm == 'pm':
+            return [(12 if h == 12 else h + 12) * 60 + mi]
+        if h == 12:
+            return [720 + mi]
+        return [h * 60 + mi, (h + 12) * 60 + mi]
+    except Exception:
+        return []
+
+
+# ------------------------------------------------------------------ state
+
+def new_state():
+    return {'phase': 'plan', 'cur': 0, 'all': False, 'prods': [], 'hard': 0, 'human': 0, 'quit': 0,
+            'idv_ref': 0, 'idv_human': 0, 'tp_bad': 0, 'tp_n': 0, 'cq': [], 'nq': [], 'tries': 0,
+            'transfer': None, 'lead': '', 'vg_all': 0}
+
+
+def load():
+    try:
+        st = json.loads(S('st') or '{}')
+    except Exception:
+        st = {}
+    if not st:
+        st = new_state()
+    return st
+
+
+def save(st):
+    vars['st'] = json.dumps(st, separators=(',', ':'))
+
+
+def speak(core):
+    vars['instruction'] = ('Say the following to the customer in natural spoken English, in one to three short '
+                           'sentences. Keep every name, number, amount and date exactly as written and add nothing '
+                           'else: ' + core)
+    vars['route'] = 'say'
+
+
+def route(r):
+    vars['route'] = r
+
+
+# ------------------------------------------------------------------ products
+
+def label_for(raw):
+    tpl = (E.get('pn') or {}).get(raw.get('type')) or str(raw.get('type') or 'account').replace('_', ' ')
+
+    def rep(m):
+        v = raw.get(m.group(1))
+        return '' if v is None else str(v)
+    return re.sub(r'\{(\w+)\}', rep, tpl).strip()
+
+
+def floor_for(raw):
+    f = (E.get('floor_field') or {}).get(raw.get('type'))
+    try:
+        v = float(raw.get(f)) if f and raw.get(f) not in (None, '') else None
+    except Exception:
+        v = None
+    return v
+
+
+def floor_word(p):
+    return (E.get('floor_word') or {}).get(p['type']) or 'minimum amount'
+
+
+def read_products():
+    node = E.get('acct_node') or 'get_account'
+    pat = re.compile('^' + re.escape(node) + r'_response\.data\.products\.(\d+)\.(\w+)$')
+    rows = {}
+    for k in list(vars.keys()):
+        m = pat.match(str(k))
+        if m:
+            rows.setdefault(int(m.group(1)), {})[m.group(2)] = vars[k]
+    return [rows[i] for i in sorted(rows)]
+
+
+def make_product(i, raw, today):
+    try:
+        pd = float(raw.get('past_due'))
+    except Exception:
+        pd = 0.0
+    try:
+        days = int(float(raw.get('days_late')))
+    except Exception:
+        days = 0
+    band = band_for(days, CAL)
+    bands = CAL.get('bands') or []
+    if band is None and bands:
+        band = bands[-1] if (CAL['bands'][-1].get('max') is not None and days > CAL['bands'][-1]['max']) else bands[0]
+    dead = deadline_for(today, band, CAL) if band else None
+    fl = floor_for(raw)
+    if fl is None or fl <= 0 or fl > pd:
+        fl = pd
+    try:
+        am = int(band.get('attempts')) if band and band.get('attempts') is not None else 1
+    except Exception:
+        am = 1
+    return {'i': i, 'id': str(raw.get('product_id') or ('p%d' % (i + 1))), 'type': str(raw.get('type') or ''),
+            'label': label_for(raw), 'pd': pd, 'dl': days, 'fl': fl, 'band': (band or {}).get('name') or '',
+            'am': am, 'dead': iso(dead) if dead else '', 'att': 0, 'status': 'open', 'pend': None, 'vg': 0,
+            'tm': False, 'fb': 0, 'amt': None, 'date': '', 'cap': '', 'note': ''}
+
+
+def def_amt(p):
+    return p['fl'] if p['tm'] else p['pd']
+
+
+def first_day(today):
+    d = next_bd(today, CAL, include_self=True)
+    return d or today
+
+
+def multi(st):
+    return len(st['prods']) > 1
+
+
+def facts(st):
+    lines = []
+    for p in st['prods']:
+        s = '%s: %s past due, %d days late' % (p['label'], money(p['pd']), p['dl'])
+        if p['fl'] and p['fl'] < p['pd']:
+            s += ', %s %s' % (floor_word(p), money(p['fl']))
+        if p['dead']:
+            s += ', latest promise date %s' % dstr(from_iso(p['dead']))
+        lines.append(s)
+    return '; '.join(lines)
+
+
+# ------------------------------------------------------------------ questions the agent asks
+
+def offer_q(st, p):
+    pe = p.get('pend')
+    if not pe:
+        return ''
+    k = pe['k']
+    if k == 'today':
+        return E['first_q']
+    if k == 'day':
+        return 'On which day can you pay %s?' % money(pe['a'])
+    amt = money(pe['a'])
+    q = 'Can you pay %s on %s?' % (amt, dstr(from_iso(pe['d'])))
+    if pe['a'] + 0.004 < p['pd']:
+        q += ' The rest would stay overdue.'
+    return q
+
+
+def readback(st):
+    items = []
+    for p in st['prods']:
+        if p['status'] != 'agreed':
+            continue
+        s = '%s, %s on %s' % (p['label'], money(p['amt']), dstr(from_iso(p['date'])))
+        if p['cap']:
+            s += ' (the latest date I can record for this one)'
+        items.append(s)
+    if len(items) == 1:
+        body = 'So that is ' + items[0] + '.'
+    else:
+        body = 'So that is: ' + '; '.join(items) + '.'
+    return body + ' ' + E['confirm_q']
+
+
+def cur_question(st):
+    if st.get('hard_pending'):
+        return hardship_offer_text()
+    if st['phase'] == 'confirm':
+        return readback(st)
+    if st['all']:
+        return E['first_q_all']
+    p = st['prods'][st['cur']]
+    return offer_q(st, p) or E['first_q']
+
+
+def reask(st, lead='', kind='question'):
+    """The customer said something that needs no policy change: answer it and ask the pending question again."""
+    q = cur_question(st)
+    ans = ('The customer asked something or said something unclear. First reply to it in one short sentence: '
+           'use only these facts: ' + facts(st) + '. If the facts do not answer it, say exactly "' +
+           E['unknown_say'] + '". Never invent figures, dates or reasons, and never offer a discount, waiver or '
+           'payment plan. If they ask whether you are a robot or an AI, say "' + E['ai_say'] + '". '
+           'If they ask whether this call is a scam, say that ' + E['scam_say'] + '. Then say: ' + q)
+    vars['instruction'] = (lead + ' ' if lead else '') + ans
+    route('say')
+
+
+# ------------------------------------------------------------------ closing
+
+def set_close(outcome, reason, text):
+    vars['close_outcome'] = outcome
+    if reason:
+        vars['close_reason'] = reason
+    vars['bye_text'] = text
+    route('fin')
+
+
+def goodbye(lead=''):
+    return ((lead + ' ') if lead else '') + E['goodbye']
+
+
+def final(st, lead=''):
+    prods = st['prods']
+    lead = (lead + ' ' if lead else '') + st.get('lead', '')
+    if st.get('transfer'):
+        tr = st['transfer']
+        return set_close(tr['outcome'], tr.get('reason'), goodbye(lead.strip()))
+    rec = [p for p in prods if p['status'] == 'recorded']
+    bad = [p for p in prods if p['status'] in ('noted', 'failed')]
+    if rec:
+        items = ['%s, %s on %s' % (p['label'], money(p['amt']), dstr(from_iso(p['date']))) for p in rec]
+        txt = 'Your promise is recorded: ' + '; '.join(items) + '. ' + E['after_recorded']
+        fails = [p for p in prods if p['status'] == 'failed']
+        if fails:
+            txt += ' I could not record the promise for ' + ' and '.join(p['label'] for p in fails) + '.'
+        return set_close(E['out']['promise'], None, goodbye((lead + ' ' + txt).strip()))
+    reasons = [(p['note'] if p['status'] == 'noted' else E['create_failed']['reason']) for p in bad]
+    paid_reason = E['paid_reason']
+    if reasons and all(r == paid_reason for r in reasons) and E['out'].get('paid'):
+        return set_close(E['out']['paid'], None, goodbye(lead.strip()))
+    first = next((r for r in reasons if r != paid_reason), reasons[0] if reasons else E['exhausted']['reason'])
+    if any(p['status'] == 'failed' for p in prods) and not rec:
+        txt = (lead + ' ' + E['create_failed']['say_text']).strip()
+        return set_close(E['create_failed']['outcome'], first, goodbye(txt)) if len(prods) == 1 else \
+            set_close(E['out']['no_promise'], first, goodbye(txt))
+    return set_close(E['out']['no_promise'], first, goodbye(lead.strip()))
+
+
+def conclude(st, lead=''):
+    prods = st['prods']
+    if lead:
+        st['lead'] = (st.get('lead', '') + ' ' + lead).strip()
+    if E['use_notes'] and not st.get('transfer'):
+        q = [p['i'] for p in prods if p['status'] in ('noted', 'failed')]
+        if q:
+            st['nq'] = q
+            st['phase'] = 'noting'
+            st['tries'] = 0
+            return set_note(st)
+    final(st)
+
+
+def set_note(st):
+    p = st['prods'][st['nq'][0]]
+    reason = E['create_failed']['reason'] if p['status'] == 'failed' else p['note']
+    vars['nt_pid'] = p['id']
+    vars['nt_reason'] = reason
+    vars['nt_ok'] = 'pending'
+    route('note')
+
+
+def noted(st):
+    ok = S('nt_ok').lower() == 'true'
+    if not ok and st['tries'] < 1:
+        st['tries'] += 1
+        return set_note(st)
+    st['nq'].pop(0)
+    st['tries'] = 0
+    if st['nq']:
+        return set_note(st)
+    final(st)
+
+
+# ------------------------------------------------------------------ negotiation core
+
+def accept(p, amount, d, cap=''):
+    p['status'] = 'agreed'
+    p['amt'] = round(float(amount), 2)
+    p['date'] = iso(d)
+    p['cap'] = cap
+    p['pend'] = None
+
+
+def note_product(p, reason):
+    p['status'] = 'noted'
+    p['note'] = reason
+    p['pend'] = None
+
+
+def next_open(st):
+    for p in st['prods']:
+        if p['status'] == 'open':
+            return p
+    return None
+
+
+def advance(st, lead=''):
+    nxt = next_open(st)
+    if nxt is None:
+        return finish_nego(st, lead)
+    st['cur'] = nxt['i']
+    st['all'] = False
+    intro = 'Now your %s.' % nxt['label'] if multi(st) else ''
+    return refusal(st, nxt, ((lead + ' ') if lead else '') + intro, start=True)
+
+
+def finish_nego(st, lead=''):
+    agreed = [p for p in st['prods'] if p['status'] == 'agreed']
+    if agreed:
+        st['phase'] = 'confirm'
+        st['hard_pending'] = False
+        return speak(((lead + ' ') if lead else '') + readback(st))
+    st['phase'] = 'nego'
+    conclude(st, lead)
+
+
+def pers_entry(p, n):
+    for e in E['pers']:
+        if int(e.get('n') or 0) == n and (not e.get('bands') or p['band'] in e['bands']):
+            return e
+    return None
+
+
+def refusal(st, p, lead='', start=False):
+    """A flat refusal (or the start of a product in a multi-product call): make the next persuasion attempt."""
+    today = today_d()
+    if p['att'] >= p['am']:
+        return exhaust(st, p, lead)
+    e = pers_entry(p, p['att'] + 1)
+    if e is None:
+        return exhaust(st, p, lead)
+    p['att'] += 1
+    tok = e.get('amt')
+    if tok == 'floor':
+        a = p['fl']
+    elif tok == 'full_or_floor':
+        a = p['fl'] if p['tm'] else p['pd']
+    else:
+        a = p['pd']
+    dtok = e.get('date')
+    if dtok == 'deadline' and p['dead']:
+        d = from_iso(p['dead'])
+    elif dtok == 'today':
+        d = first_day(today)
+    else:
+        d = persuasion_date(today, CAL) or first_day(today)
+    if p['dead'] and d > from_iso(p['dead']):
+        d = from_iso(p['dead'])
+    p['pend'] = {'a': a, 'd': iso(d), 'k': 'attempt'}
+    st['phase'] = 'nego'
+    pre = lead if lead else ('I understand.' if not start else '')
+    speak((pre + ' ' if pre else '') + offer_q(st, p))
+
+
+def exhaust(st, p, lead=''):
+    note_product(p, E['exhausted']['reason'])
+    return advance(st, lead if lead else '')
+
+
+def check_day(p, d, today):
+    """-> (status, final_date). status: ok | moved | late | past"""
+    dead = from_iso(p['dead']) if p['dead'] else None
+    s, f = check_promise_date(d, today, dead, CAL)
+    if s == 'ok':
+        return 'ok', d
+    if s == 'moved_to_next_business_day':
+        return 'moved', f
+    if s == 'after_deadline':
+        return 'late', f
+    return 'past', None
+
+
+def offer(st, p, dt, am, lead=''):
+    """The customer proposes a date and/or an amount for product p."""
+    today = today_d()
+    pre = (lead + ' ') if lead else ''
+    amt = None
+    below = False
+    if am:
+        a = free_amount(am)
+        if a is not None and a > 0:
+            if a + 0.004 < p['fl']:
+                if p['fb']:
+                    return refusal(st, p, lead)
+                p['fb'] = 1
+                amt = p['fl']
+                below = True
+            elif a > p['pd'] + 0.004:
+                amt = p['pd']
+            else:
+                amt = round(a, 2)
+    use_amt = amt if amt is not None else def_amt(p)
+    d = None
+    flag = ''
+    req = None
+    if dt:
+        kind, dd = free_date(dt, today)
+        if kind == 'vague':
+            if not p['vg']:
+                p['vg'] = 1
+                p['pend'] = {'a': use_amt, 'd': None, 'k': 'day'}
+                return speak(pre + 'Which exact day can you pay? Please give me a date.')
+            if p['dead']:
+                d = from_iso(p['dead'])
+                flag = 'late'
+        elif kind == 'date':
+            req = dd
+            s, f = check_day(p, dd, today)
+            if s == 'past':
+                p['pend'] = {'a': use_amt, 'd': None, 'k': 'day'}
+                return speak(pre + 'That day has already passed. Which day, starting today, can you pay?')
+            d, flag = f, s
+    if d is None:
+        if amt is not None:
+            p['pend'] = {'a': use_amt, 'd': None, 'k': 'day'}
+            core = ''
+            if below:
+                core = 'I cannot record less than the %s of %s; the rest would stay overdue. ' % (floor_word(p), money(p['fl']))
+            return speak(pre + core + 'On which day can you pay %s?' % money(use_amt))
+        return reask(st, lead)
+    pieces = []
+    if below:
+        pieces.append('I cannot record less than the %s of %s.' % (floor_word(p), money(p['fl'])))
+    if flag == 'late':
+        pieces.append('The latest date I can record is %s.' % dstr(d))
+    elif flag == 'moved':
+        pieces.append('%s is not a business day, so the next date I can record is %s.' % (dstr(req), dstr(d)))
+    if flag == 'ok' and not below:
+        accept(p, use_amt, d)
+        return advance(st, lead)
+    p['pend'] = {'a': use_amt, 'd': iso(d), 'k': 'adj'}
+    pieces.append(offer_q(st, p))
+    speak(pre + ' '.join(pieces))
+
+
+# ------------------------------------------------------------------ special intents
+
+def hardship_offer_text():
+    I = E['intents'].get('hardship') or {}
+    qn = I.get('offer_name') or 'support team'
+    return 'Would you like me to connect you with our %s?' % qn
+
+
+def target_products(st, pref, scope_all=False):
+    prods = st['prods']
+    if scope_all:
+        return [p for p in prods if p['status'] in ('open', 'agreed')]
+    w = str(pref or '').lower()
+    if w:
+        if re.search(r'\b(all|both|every|each|everything)\b', w):
+            return [p for p in prods if p['status'] in ('open', 'agreed')]
+        for p in prods:
+            keys = [x for x in re.findall(r'[a-z]+', (p['type'] + ' ' + p['label']).lower()) if len(x) > 3]
+            if any(k in w for k in keys):
+                return [p]
+    opened = [p for p in prods if p['status'] == 'open']
+    if st['all'] and len(opened) > 1:
+        return opened
+    cur = prods[st['cur']]
+    return [cur]
+
+
+def do_transfer(st, queue, outcome, reason, text=''):
+    st['transfer'] = {'queue': queue, 'outcome': outcome, 'reason': reason}
+    vars['tr_queue'] = queue
+    vars['tr_text'] = text or 'I am transferring you now.'
+    st['phase'] = 'transfer'
+    route('transfer')
+
+
+def special(st, it, pref):
+    """Spec intents. Returns True when the intent was handled."""
+    I = E['intents'].get(it)
+    if not I:
+        return False
+    kind = I['kind']
+    say = I.get('say') or ''
+    if kind == 'continue':
+        reask(st, say)
+        return True
+    if kind == 'quit':
+        st['quit'] += 1
+        if st['quit'] >= int(I.get('max') or 2):
+            cv = I.get('close_verified') or E['exhausted']
+            for p in st['prods']:
+                if p['status'] == 'open':
+                    note_product(p, cv.get('reason') or E['exhausted']['reason'])
+            conclude(st, 'I understand.')
+            return True
+        reask(st, 'The customer says they do not want to talk. Acknowledge that politely in a few words, and make no new offer.')
+        return True
+    if kind == 'transfer':
+        if I.get('ask_first') and not st['human']:
+            st['human'] += 1
+            vars['instruction'] = ('The customer asked for a person. Say that you can try to help first and ask what they '
+                                   'need help with. Then wait.')
+            route('say')
+            return True
+        text = I.get('transfer_say') or 'I am transferring you now.'
+        do_transfer(st, I['queue'], I['close']['outcome'], I['close'].get('reason'), text)
+        return True
+    if kind in ('note', 'close'):
+        ts = target_products(st, pref)
+        reason = I['note_reason']
+        if E['use_notes'] and I.get('continues'):
+            for p in ts:
+                note_product(p, reason)
+            return advance(st, say) or True
+        for p in st['prods']:
+            if p['status'] in ('open', 'agreed'):
+                note_product(p, reason)
+        conclude(st, say)
+        return True
+    if kind == 'offer':
+        if st.get('hard_pending'):
+            hardship_offer(st, I)
+            return True
+        st['hard_pending'] = True
+        st['hard'] += 1
+        vars['instruction'] = ('Say one short sentence of sympathy (do not discuss payment). Then ask: ' + hardship_offer_text())
+        route('say')
+        return True
+    return False
+
+
+def hardship_offer(st, I):
+    vars['instruction'] = hardship_offer_text() + ' Ask only that.'
+    route('say')
+
+
+def hardship_reply(st, it, dt, am, pref, scope_all):
+    """The customer's reply while a support transfer is on offer."""
+    I = E['intents'].get('hardship') or {}
+    if it == 'agree':
+        acc = I.get('on_accept') or {}
+        st['hard_pending'] = False
+        do_transfer(st, acc.get('queue') or 'support', (acc.get('close') or {}).get('outcome') or E['out']['transferred'],
+                    (acc.get('close') or {}).get('reason'), 'I am connecting you now.')
+        return True
+    if it in ('offer', 'change'):
+        st['hard_pending'] = False
+        return False
+    if it in ('question', 'none'):
+        reask(st)
+        return True
+    dec = I.get('on_decline') or {}
+    st['hard_pending'] = False
+    reason = (dec.get('close') or {}).get('reason') or 'hardship'
+    for p in st['prods']:
+        if p['status'] in ('open',):
+            note_product(p, reason)
+    finish_nego(st, 'I understand.')
+    return True
+
+
+# ------------------------------------------------------------------ the turns
+
+def turn(st):
+    it = S('x_intent').lower()
+    dt = S('x_date')
+    am = S('x_amount')
+    pref = S('x_product')
+    for k in ('x_intent', 'x_date', 'x_amount', 'x_product'):
+        vars[k] = ''
+    if not it:
+        it = 'none'
+    prods = st['prods']
+    scope_all = bool(re.search(r'\b(all|both|every|each|everything)\b', pref.lower())) if pref else False
+    if st.get('hard_pending') and st['phase'] == 'nego':
+        if hardship_reply(st, it, dt, am, pref, scope_all):
+            return
+    if it in E['intents']:
+        if special(st, it, pref):
+            return
+    if st['phase'] == 'confirm':
+        return turn_confirm(st, it, dt, am, pref)
+    if st['all']:
+        return turn_all(st, it, dt, am, pref)
+    p = prods[st['cur']]
+    if it == 'agree':
+        pe = p.get('pend')
+        if pe and pe.get('d'):
+            accept(p, pe['a'], from_iso(pe['d']))
+            return advance(st)
+        return reask(st)
+    if it in ('refuse', 'evasive'):
+        return refusal(st, p)
+    if it == 'too_much':
+        p['tm'] = True
+        return refusal(st, p)
+    if it in ('offer', 'change'):
+        return offer(st, p, dt, am)
+    return reask(st)
+
+
+def turn_all(st, it, dt, am, pref):
+    prods = st['prods']
+    today = today_d()
+    if it == 'agree':
+        d = first_day(today)
+        for p in prods:
+            if p['status'] == 'open':
+                accept(p, p['pd'], d)
+        st['all'] = False
+        return finish_nego(st)
+    if it in ('refuse', 'evasive', 'too_much'):
+        st['all'] = False
+        if it == 'too_much':
+            for p in prods:
+                p['tm'] = True
+        st['cur'] = 0
+        p0 = prods[0]
+        intro = "Let's go through them one by one."
+        return refusal(st, p0, intro + ' Your %s.' % p0['label'])
+    if it in ('offer', 'change'):
+        if dt:
+            kind, dd = free_date(dt, today)
+            if kind == 'vague' and not st['vg_all']:
+                st['vg_all'] = 1
+                return speak('Which exact day can you pay? Please give me a date.')
+            if kind in ('vague', 'date'):
+                bad_past = False
+                res = []
+                for p in prods:
+                    if p['status'] != 'open':
+                        continue
+                    if kind == 'vague':
+                        if p['dead']:
+                            res.append((p, def_amt(p), from_iso(p['dead']), 'late'))
+                        continue
+                    s, f = check_day(p, dd, today)
+                    if s == 'past':
+                        bad_past = True
+                        break
+                    res.append((p, def_amt(p), f, 'late' if s == 'late' else ''))
+                if bad_past:
+                    return speak('That day has already passed. Which day, starting today, can you pay?')
+                for p, a, f, cap in res:
+                    accept(p, a, f, cap)
+                st['all'] = False
+                return finish_nego(st)
+        if am:
+            st['all'] = False
+            st['cur'] = 0
+            return offer(st, prods[0], '', am)
+    return reask(st)
+
+
+def turn_confirm(st, it, dt, am, pref):
+    prods = st['prods']
+    agreed = [p for p in prods if p['status'] == 'agreed']
+    if it == 'agree':
+        st['cq'] = [p['i'] for p in agreed]
+        st['phase'] = 'creating'
+        st['tries'] = 0
+        return set_create(st)
+    pick = None
+    ts = target_products(st, pref)
+    for p in ts:
+        if p['status'] == 'agreed':
+            pick = p
+            break
+    if pick is None and agreed:
+        pick = agreed[0]
+    if it in ('offer', 'change') and pick is not None:
+        pick['status'] = 'open'
+        pick['pend'] = None
+        st['cur'] = pick['i']
+        st['phase'] = 'nego'
+        if not dt and not am:
+            pick['pend'] = {'a': def_amt(pick), 'd': None, 'k': 'day'}
+            return speak('Of course. Which day or amount would you like instead?')
+        return offer(st, pick, dt, am, 'Of course.')
+    if it in ('refuse', 'too_much', 'evasive') and pick is not None:
+        pick['status'] = 'open'
+        pick['pend'] = None
+        if it == 'too_much':
+            pick['tm'] = True
+        st['cur'] = pick['i']
+        st['phase'] = 'nego'
+        return refusal(st, pick)
+    return reask(st)
+
+
+# ------------------------------------------------------------------ promise creation
+
+def set_create(st):
+    p = st['prods'][st['cq'][0]]
+    vars['cp_pid'] = p['id']
+    vars['cp_amount'] = money(p['amt'])
+    vars['cp_date'] = p['date']
+    vars['cp_ok'] = 'pending'
+    route('create')
+
+
+def created(st):
+    ok = S('cp_ok').lower() == 'true'
+    p = st['prods'][st['cq'][0]]
+    if ok:
+        p['status'] = 'recorded'
+        st['cq'].pop(0)
+        st['tries'] = 0
+    else:
+        st['tries'] += 1
+        if st['tries'] >= int(E.get('max_tries') or 2):
+            p['status'] = 'failed'
+            st['cq'].pop(0)
+            st['tries'] = 0
+    if st['cq']:
+        return set_create(st)
+    st['phase'] = 'nego'
+    conclude(st)
+
+
+# ------------------------------------------------------------------ plan, identity events, third party
+
+def plan(st):
+    today = today_d()
+    raws = read_products()
+    if today is None or not raws:
+        st['phase'] = 'nego'
+        c = E['create_failed']
+        return set_close(c['outcome'], c['reason'], goodbye('I am sorry, I cannot access your account right now.'))
+    prods = [make_product(i, r, today) for i, r in enumerate(raws)]
+    st['prods'] = prods
+    st['phase'] = 'nego'
+    n = len(prods)
+    sents = ['Your %s is %s past due and %d days late.' % (p['label'], money(p['pd']), p['dl']) for p in prods]
+    say = E['debt_say']
+    if n > 1:
+        say = say.replace('a late payment', 'late payments')
+    head = 'I am %s.' % say
+    if n == 1:
+        p = prods[0]
+        p['pend'] = {'a': p['pd'], 'd': iso(first_day(today)), 'k': 'today'}
+        return speak(head + ' ' + sents[0] + ' ' + E['first_q'])
+    st['all'] = True
+    speak(head + ' ' + ' '.join(sents) + ' ' + E['first_q_all'])
+
+
+def first_unpassed():
+    for i in range(1, int(E.get('n_q') or 1) + 1):
+        if S('idq%d_state' % i) != 'passed':
+            return i
+    return int(E.get('n_q') or 1)
+
+
+def idv_event(st):
+    ev = S('x_stance').lower()
+    vars['x_stance'] = ''
+    qi = first_unpassed()
+    if ev == 'human' and E['intents'].get('human'):
+        I = E['intents']['human']
+        st['idv_human'] += 1
+        if st['idv_human'] == 1 and I.get('ask_first'):
+            vars['idv_note'] = ('The customer asked for a person. First say that you can try to help and ask what they need, '
+                                'without saying anything about the reason for the call. Then ask the question again.')
+            return route('idq_%d' % qi)
+        return do_transfer(st, I['queue'], I['close']['outcome'], I['close'].get('reason'), 'I am transferring you now.')
+    st['idv_ref'] += 1
+    if st['idv_ref'] >= int(E['idv'].get('max_refusals') or 2):
+        c = E['idv']['declined']
+        return set_close(c['outcome'], c.get('reason'), goodbye('I understand.'))
+    vars['idv_note'] = ('The customer did not want to answer, or asked what the call is about. Explain once that ' +
+                        E['idv']['explain'] + ' and that you cannot discuss anything else before the check. '
+                        'Then ask the question again.')
+    route('idq_%d' % qi)
+
+
+def tp_turn(st):
+    ev = S('tp_event').lower()
+    dt = S('tp_date')
+    tt = S('tp_time')
+    for k in ('tp_event', 'tp_date', 'tp_time'):
+        vars[k] = ''
+    tp = E['tp']
+    if ev == 'wrong_number':
+        c = tp['wrong_number']
+        return set_close(c['outcome'], c.get('reason'), tp['wrong_number_say'])
+    if ev == 'deceased':
+        c = tp['deceased']
+        return set_close(c['outcome'], c.get('reason'), tp['deceased_say'])
+    today = today_d()
+    st['tp_n'] += 1
+    d_iso = ''
+    t_cands = free_time(tt) if tt else []
+    d = None
+    if dt:
+        kind, dd = free_date(dt, today)
+        if kind == 'date':
+            d = dd
+    if d is None and t_cands and not dt:
+        nb = next_bd(today, CAL)
+        d = today
+        res = [check_callback(iso(today), fmt_time(m), today, now_min(), CAL)[0] for m in t_cands]
+        if 'ok' not in res and nb:
+            d = nb
+    if d is not None and t_cands:
+        best = None
+        for m in t_cands:
+            s, dd, mm = check_callback(iso(d), fmt_time(m), today, now_min(), CAL)
+            if s == 'ok':
+                best = (iso(d), fmt_time(m))
+                break
+        if best:
+            vars['cb_date'] = best[0]
+            vars['cb_time'] = best[1]
+            vars['cb_ok'] = 'pending'
+            st['phase'] = 'cb'
+            st['tries'] = 0
+            return route('callback')
+        if st['tp_bad'] < int(tp.get('max_bad') or 1):
+            st['tp_bad'] += 1
+            vars['instruction'] = ('Say that unfortunately that time is not possible; you can call back ' + tp['window_text'] +
+                                   '. Ask for another day and time. Say nothing about the reason for the call.')
+            return route('tp_say')
+        c = tp['on_failed']
+        return set_close(c['outcome'], c.get('reason'), tp['failed_say'])
+    if d is not None and not t_cands:
+        vars['instruction'] = 'Ask at what time on that day the person can be reached. Say nothing about the reason for the call.'
+        return route('tp_say')
+    if st['tp_n'] >= 4:
+        c = tp['on_failed']
+        return set_close(c['outcome'], c.get('reason'), tp['failed_say'])
+    vars['instruction'] = ('Say that you can only speak to the person you asked for, and that you cannot say anything about the '
+                           'reason for the call or about any account. Ask on which day and at what time they can be reached. '
+                           'Never mention any product, amount, debt or payment.')
+    route('tp_say')
+
+
+def cb_done(st):
+    tp = E['tp']
+    ok = S('cb_ok').lower() == 'true'
+    if not ok and st['tries'] < 1:
+        st['tries'] += 1
+        vars['cb_ok'] = 'pending'
+        return route('callback')
+    if ok:
+        c = tp['on_scheduled']
+        d = from_iso(S('cb_date'))
+        return set_close(c['outcome'], c.get('reason'), 'Thank you. We will call back on %s at %s. %s' % (dstr(d), S('cb_time'), E['goodbye']))
+    c = tp['on_failed']
+    set_close(c['outcome'], c.get('reason'), tp['failed_say'])
+
+
+def transferred(st):
+    final(st)
+
+
+# ------------------------------------------------------------------ entry
+
+def main():
+    st = load()
+    try:
+        if S('x_stance'):
+            idv_event(st)
+        elif st['phase'] == 'tp':
+            tp_turn(st)
+        elif st['phase'] == 'plan':
+            plan(st)
+        elif st['phase'] in ('nego', 'confirm'):
+            turn(st)
+        elif st['phase'] == 'creating':
+            created(st)
+        elif st['phase'] == 'noting':
+            noted(st)
+        elif st['phase'] == 'transfer':
+            transferred(st)
+        elif st['phase'] == 'cb':
+            cb_done(st)
+        else:
+            reask(st)
+    except Exception as ex:
+        vars['engine_err'] = repr(ex)[:300]
+        if st.get('prods'):
+            vars['instruction'] = 'Apologise briefly and ask the customer to repeat what they just said.'
+            route('say')
+        else:
+            set_close(E['create_failed']['outcome'], E['create_failed']['reason'], goodbye('I am sorry, there was a problem.'))
+    save(st)
+
+
+main()
