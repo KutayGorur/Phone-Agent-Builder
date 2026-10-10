@@ -76,5 +76,35 @@ class R1R2R4Scope(unittest.TestCase):
         self.assertEqual((p.prod(0)['amt'], p.prod(0)['date']), (150.0, '2026-10-15'))
 
 
+class R3Confirmation(unittest.TestCase):
+    def _readback(self):
+        p = Probe(products=(PERSONAL,))
+        p.say('offer', date='tomorrow', amount='150')
+        self.assertEqual(p.st['phase'], 'confirm')
+        return p
+
+    def test_r3_yes_but_friday_changes_the_date_and_writes_nothing(self):
+        p = self._readback()
+        p.say('agree', date='Friday')
+        self.assertNotEqual(p.v['route'], 'create')
+        self.assertEqual((p.prod(0)['amt'], p.prod(0)['date']), (150.0, '2026-10-16'))
+        self.assertIn('Friday 16 October', p.text)
+        p.say('agree')
+        self.assertEqual((p.v['route'], p.v['cp_date']), ('create', '2026-10-16'))
+
+    def test_r3_question_does_not_erase_the_correction(self):
+        p = self._readback()
+        p.say('agree', date='Friday', q='yes')
+        self.assertNotEqual(p.v['route'], 'create')
+        self.assertEqual(p.prod(0)['date'], '2026-10-16')
+        self.assertEqual(p.v['route'], 'ask')
+
+    def test_r3_yes_but_other_amount(self):
+        p = self._readback()
+        p.say('agree', amount='200')
+        self.assertNotEqual(p.v['route'], 'create')
+        self.assertEqual((p.prod(0)['amt'], p.prod(0)['date']), (200.0, '2026-10-15'))
+
+
 if __name__ == '__main__':
     unittest.main()

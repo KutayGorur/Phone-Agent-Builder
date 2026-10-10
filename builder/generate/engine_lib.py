@@ -997,6 +997,8 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
 def turn(st):
     q = S('x_q').lower()
     vars['x_q'] = 'no'
+    if S('x_intent').lower() == 'agree' and (S('x_date') or S('x_amount')) and st['phase'] in ('nego', 'confirm'):
+        vars['x_intent'] = 'change'               # "yes, but Friday": the correction comes first, nothing is recorded on the old terms
     if q == 'yes' and st['phase'] == 'confirm' and S('x_intent').lower() == 'agree':
         for k in ('x_date', 'x_amount', 'x_product'):
             vars[k] = ''
