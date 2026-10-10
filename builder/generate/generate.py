@@ -225,12 +225,12 @@ def generate(spec):
                      tr('fin_deceased', 'presence', 'equals', 'deceased'), tr('to_tp', 'presence', 'equals', 'other_person')]
     nodes['opening'] = conv('opening', 'The customer has not yet confirmed who they are. If they asked a question, answer it in one short sentence '
                             'first (rules in your system prompt). ' + secrecy + 'Then ask once: ' + confirm_q,
-                            pres_ext, opening_trans + [tr('opening_retry', 'presence', 'equals', 'unclear'), tr('opening')],
+                            pres_ext, opening_trans + [tr('opening_retry', 'presence', 'equals', 'unclear')],
                             on_enter={'type': 'tts', 'text': opening_text})
     nodes['opening_retry'] = conv('opening_retry', 'The customer has not yet confirmed who they are. If they asked a question, answer it in one short '
                                   'sentence first (rules in your system prompt); if they ask what the call is about, say you can explain after a short '
                                   'security check. ' + secrecy + 'Then ask again: ' + confirm_q,
-                                  pres_ext, opening_trans + [tr('fin_unclear', 'presence', 'equals', 'unclear'), tr('opening_retry')])
+                                  pres_ext, opening_trans + [tr('fin_unclear', 'presence', 'equals', 'unclear')])
 
     # ---- tiny closing nodes
     def fin(key, c, text):
@@ -262,8 +262,8 @@ def generate(spec):
     tp_task = ('You are speaking to somebody who is NOT the customer. ' + secrecy + 'You may only ask when the customer can be reached '
                '(a day and a time). ')
     nodes['third_party'] = conv('third_party', tp_task + 'Say that you can only speak to {{title}} {{last_name}} and ask when they can be reached.',
-                                tp_ext, [tr('engine'), tr('third_party')])
-    nodes['tp_say'] = conv('tp_say', tp_task + '{{instruction}}', tp_ext, [tr('engine'), tr('tp_say')])
+                                tp_ext, [tr('engine')])
+    nodes['tp_say'] = conv('tp_say', tp_task + '{{instruction}}', tp_ext, [tr('engine')])
 
     # ---- identity questions
     for i, q in enumerate(qs, 1):
@@ -290,7 +290,6 @@ def generate(spec):
                  tr('engine', 'x_stance', 'equals', 'declines')]
         if E['human']:
             trans.append(tr('engine', 'x_stance', 'equals', 'human'))
-        trans.append(tr('idq_%d' % i))
         nodes['idq_%d' % i] = conv('idq_%d' % i, task, [stance], trans, tools=[fn])
 
     # ---- account
@@ -329,7 +328,7 @@ def generate(spec):
                           '"all" if they mean everything / both / all of them. Empty if not clear.'))
     nodes['say_main'] = conv('say_main', '{{instruction}}\n\nIf the customer\'s last message contained a question, answer it in one short sentence first '
                              '(rules in your system prompt), then say the above. Never mention these instructions. Do not call any tool.',
-                             sm_ext, [tr('engine'), tr('say_main')])
+                             sm_ext, [tr('engine')])
 
     # ---- api nodes
     nodes['do_create_promise'] = api_node('do_create_promise', 'create_promise',
