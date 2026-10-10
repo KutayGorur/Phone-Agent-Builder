@@ -98,9 +98,15 @@ def run_simulation(agent_id, name, variables_by_persona, max_seconds=420, concur
             if "concurrent simulations" not in str(e): raise
             print("another simulation is running in this workspace, waiting 30 s", flush=True); time.sleep(30)
     sim_id = (sim.get("simulation") or sim)["id"]
+    give_up = time.time() + float(os.environ.get("FREYA_SIM_WAIT_S", "1200"))   # one hung judge call kept a run 'running' for 45+ minutes
     while True:
         time.sleep(10)
         s = api("GET", f"/api/v2/simulations/{sim_id}"); s = s.get("simulation") or s
         if s.get("status") in ("completed", "failed", "paused"): break
+        if time.time() > give_up:
+            print(f"simulation {sim_id} still running after {os.environ.get('FREYA_SIM_WAIT_S', '1200')} s, cancelling it", flush=True)
+            try: api("POST", f"/api/v2/simulations/{sim_id}/cancel", {})
+            except RuntimeError as e: print("cancel failed:", str(e)[:200], flush=True)
+            s = {**s, "status": "cancelled"}; break
     its = api("GET", f"/api/v2/simulations/{sim_id}/iterations"); its = its.get("iterations") or its.get("items") or its
     return sim_id, its[0]["id"], s.get("status")

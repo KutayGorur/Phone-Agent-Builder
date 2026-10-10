@@ -78,9 +78,11 @@ def _system_prompt():
     return "".join(parts)
 
 
-def _call_json(purpose, system, prompt, model, timeout, retries=1):
+def _call_json(purpose, system, prompt, model, timeout, retries=2):
     last = None
     for attempt in range(retries + 1):
+        if attempt:
+            time.sleep(5 * attempt * attempt)       # a usage limit or busy backend often clears within seconds: 5 s, then 20 s
         try:
             text = llm.complete(purpose if attempt == 0 else purpose + " (retry)", system, prompt, model=model, timeout=timeout)
             _debug(re.sub(r"\W+", "_", purpose)[:50] + (f"_{attempt}" if attempt else "") + ".txt", text)
@@ -88,7 +90,7 @@ def _call_json(purpose, system, prompt, model, timeout, retries=1):
         except Exception as e:  # noqa: BLE001 - network, auth, bad JSON: retry once, then give up on this call
             last = e
             _note(f"model call failed ({purpose}): {str(e)[:200]}")
-    raise RuntimeError(f"model call failed twice: {purpose}: {last}")
+    raise RuntimeError(f"model call failed {retries + 1} times: {purpose}: {last}")
 
 
 def _merge_extract(results, unit_ids):
@@ -182,7 +184,7 @@ def parse(brief_paths, tool_api_path):
             prompt = prompts.EXTRACT_TASK.format(sections=names, guide=guide, section_list=names, tools=tools_text, units=units_text)
             return _call_json(f"parse brief: spec sections {names}", system, prompt, EXTRACT_MODEL, timeout=min(420, max(left() - 30, 60)))
 
-        results = {}
+        results, last_err = {}, ''
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
             futs = {ex.submit(extract, g): g for g in prompts.SECTION_HELP}
             for f in concurrent.futures.as_completed(futs):
@@ -190,11 +192,13 @@ def parse(brief_paths, tool_api_path):
                     results[futs[f]] = f.result()
                 except Exception as e:  # noqa: BLE001
                     _note(f"extraction group {futs[f]} failed: {str(e)[:200]}")
+                    last_err = str(e)[:300]
         models_used.add(EXTRACT_MODEL)
         if len(results) < len(prompts.SECTION_HELP):
             missing = sorted(set(prompts.SECTION_HELP) - set(results))
             if not results:
-                return _degraded(all_units, sources, tools_block, f"all extraction calls failed ({missing})")
+                return _degraded(all_units, sources, tools_block, f"all extraction calls failed ({missing}); model backend said: {last_err}. "
+                                 "Check the `claude` login / usage limit or set ANTHROPIC_API_KEY")
             _note(f"extraction groups missing: {missing}; their sections stay null and are repaired below")
         sections, extra, cov, questions = _merge_extract(list(results.values()), unit_ids)
         spec = normalize_intents(_assemble(sections, extra, cov, questions))

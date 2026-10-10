@@ -221,6 +221,10 @@ def main(argv=None):
     if len(a.files) < 2:
         ap.error("need at least one brief and the tool API file")
     briefs, tool_api = a.files[:-1], a.files[-1]
+    if a.selftest and not a.selftest_brief and len(briefs) == 1:
+        m = re.fullmatch(r"brief[-_ ]?([a-z])", pathlib.Path(briefs[0]).stem, re.I)   # practice briefs: only their own customers make sense
+        if m:
+            a.selftest_brief = m.group(1).upper()
     stem = bundle_stem(briefs, a.out_dir)
     t = tr.Trace(pathlib.Path(a.trace_dir) / f"{stem}-{time.strftime('%Y%m%d-%H%M%S')}.trace.txt")
     tr.set_current(t)
