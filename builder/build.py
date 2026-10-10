@@ -154,6 +154,48 @@ def readiness_problems(spec):
     return probs
 
 
+def enum_guard(spec, briefs, tool_api, out_dir, stem, left, t, parse_target, spec_file):
+    """Before generating: any outcome, queue, note reason, identity field or tool the spec would send that the tool API does
+    not allow is repaired (spelling variants for free, then one targeted model call in a child process). What cannot be
+    repaired is listed in the trace and keeps the build labelled degraded through the parser's unresolved errors."""
+    er = _load("parse.enum_repair", "enum_problems")
+    if er is None or not isinstance(spec, dict) or (spec.get("parser") or {}).get("degraded"):
+        return spec
+    try:
+        probs = er(spec)
+    except Exception as e:  # noqa: BLE001
+        t.note(f"enum guard skipped: {e!r}"); return spec
+    if not probs:
+        t.note("enum guard: every outcome, queue, note reason and identity field in the spec is allowed by the tool API"); return spec
+    describe = _load("parse.enum_repair", "describe")
+    t.error(f"enum guard: {len(probs)} value(s) in the spec are not allowed by the tool API: " + " | ".join(describe(probs)[:6]))
+    if a_parse_is_fake(parse_target, spec_file):
+        return spec
+    fd, tmp = tempfile.mkstemp(suffix=".json", prefix="spec-"); os.close(fd)
+    try:
+        pathlib.Path(tmp).write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+        new = run_parse_subprocess("builder.parse.spec_parser:guard_enums", [tmp, list(briefs), tool_api, left() > 8 * 60],
+                                   min(300, max(left() * 0.2, 30)), t.path)
+    except Exception as e:  # noqa: BLE001
+        t.error(f"enum guard repair failed: {e!r}; keeping the spec as parsed"); return spec
+    finally:
+        try: os.unlink(tmp)
+        except OSError: pass
+    rest = er(new)
+    for line in (new.get("parser") or {}).get("enum_repair") or []:
+        t.note("enum guard: " + line)
+    if rest:
+        t.error(f"enum guard: {len(rest)} value(s) still not allowed by the tool API: " + " | ".join(describe(rest)[:6]))
+    else:
+        t.note("enum guard: repaired, the spec now matches the tool API enums")
+    return new if len(rest) <= len(probs) else spec
+
+
+def a_parse_is_fake(parse_target, spec_file):
+    """Tests and development runs swap the parser; the guard's child process needs the real one (and a model for the rest)."""
+    return bool(spec_file) or parse_target != "builder.parse:parse"
+
+
 def local_scenarios(spec, tool_api, out_dir, stem, t, seconds):
     """Generated customers (builder/generate/auto_sim.py) through the compiled engine and the in-process stand-in bank. Free:
     no Freya calls, no model calls. Findings are compiler gaps; they go to the trace and out/<stem>.autosim.txt and do not
@@ -298,6 +340,7 @@ def main(argv=None):
             else:
                 spec = stub_parse(briefs, tool_api)
         out_dir = pathlib.Path(a.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+        spec = enum_guard(spec, briefs, tool_api, out_dir, stem, left, t, a.parse_target, a.spec_file)
         (out_dir / f"{stem}.spec.json").write_text(json.dumps(spec, indent=1, ensure_ascii=False), encoding="utf-8")
         t.note(f"spec written to {out_dir / (stem + '.spec.json')}")
         problems = readiness_problems(spec)

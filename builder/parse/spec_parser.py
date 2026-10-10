@@ -16,7 +16,7 @@ import pathlib
 import re
 import time
 
-from . import llm, prompts, units as units_mod, validate as validate_mod
+from . import enum_repair, llm, prompts, units as units_mod, validate as validate_mod
 from .tools_api import tools_from_openapi
 
 try:
@@ -262,6 +262,45 @@ def parse(brief_paths, tool_api_path):
                       "seconds": round(time.time() - t0), "unresolved_errors": errors, "warnings": warnings, "open_questions": questions}
     order = [k for k in spec if k not in ("tools_server", "tools", "extra_rules", "rule_coverage", "parser")] + ["tools_server", "tools", "extra_rules", "rule_coverage", "parser"]
     return {k: spec[k] for k in order}
+
+
+def guard_enums(spec_path, brief_paths, tool_api_path, allow_model=True):
+    """Enum guard (builder/parse/enum_repair.py) on an already parsed spec file: rename spelling variants of allowed values
+    for free, then at most one targeted model repair for what is left, then validate again and refresh the parser block.
+    Called by build.py in a child process when the spec uses an outcome, queue, note reason or field the tool API does not allow."""
+    spec = json.loads(pathlib.Path(spec_path).read_text(encoding="utf-8-sig"))
+    all_units, _ = units_mod.load_briefs(brief_paths)
+    tools = tools_from_openapi(tool_api_path)["tools"]
+    log = []
+    spec, changes = enum_repair.auto_repair(spec)
+    log += ["renamed " + c for c in changes]
+    for c in changes:
+        _note("enum guard renamed " + c)
+    probs = enum_repair.enum_problems(spec)
+    if probs and allow_model:
+        _note(f"enum guard: {len(probs)} value(s) outside the tool API enums, one model repair")
+        try:
+            patch = _call_json("repair spec: values outside the tool API enums", _system_prompt(),
+                               prompts.REPAIR_TASK.format(tools=_tools_summary(tools), problems="\n".join("[validation error] " + d for d in enum_repair.describe(probs)),
+                                                          units=units_mod.render_units(all_units),
+                                                          spec=json.dumps(_for_prompt(spec), ensure_ascii=False, separators=(",", ":"))),
+                               EXTRACT_MODEL, timeout=240)
+            fixed = normalize_intents(_apply_patch(spec, patch))
+            left = enum_repair.enum_problems(fixed)
+            if len(left) < len(probs):
+                spec, probs = fixed, left
+                log.append(f"model repair reduced the problems to {len(left)}")
+            else:
+                log.append("model repair did not reduce the problems, kept the previous spec")
+        except Exception as e:  # noqa: BLE001
+            log.append(f"model repair failed: {str(e)[:150]}")
+    questions = spec.pop("_open_questions", [])
+    errors, warnings = validate_mod.validate(spec, all_units, tools)
+    par = dict(spec.get("parser") or {})
+    par.update({"unresolved_errors": errors, "warnings": warnings, "enum_repair": log,
+                "open_questions": list(par.get("open_questions") or []) + questions})
+    spec["parser"] = par
+    return spec
 
 
 _NOTE_ALIASES = ("note_remaining_products", "note_products_without_promise", "note_reason", "note_all_products")
