@@ -6,7 +6,7 @@ Status values: free / claimed / in-progress / blocked / done. Times are UTC. Edi
 
 | Task | File | Sim | Gen | Depends on | Owner | Status | Claimed at | Branch | Last update |
 |---|---|---|---|---|---|---|---|---|---|
-| 01 smoke check + PUB-04/06/10 retry | tasks/01-smoke-and-retry.md | yes | fixes only | none | | free | | | |
+| 01 smoke check + PUB-04/06/10 retry | tasks/01-smoke-and-retry.md | yes | fixes only | none | claude-inan | in-progress | 2026-10-10T17:33Z | (no code branch; tests task/07 head) | 2026-10-10T17:33Z |
 | 02 Brief A x3, A+B x3, styles, hard scripts | tasks/02-robustness-runs.md | yes | fixes only | 01 | | free | | | |
 | 03 real build.py --selftest + trace review | tasks/03-selftest-and-trace.md | yes | no | 01 (agent must run) | | free | | | |
 | 04 real Brief D sim via tunnel + mock bank | tasks/04-brief-d-real-sim.md | yes | fixes only | 01 | | free | | | |
