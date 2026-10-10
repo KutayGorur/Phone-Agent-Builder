@@ -382,10 +382,23 @@ def route(r):
 def label_for(raw):
     tpl = (E.get('pn') or {}).get(raw.get('type')) or str(raw.get('type') or 'account').replace('_', ' ')
 
+    for k in re.findall(r'\{(\w+)\}', tpl):
+        if raw.get(k) in (None, ''):               # a placeholder with no data: name the product by its type alone
+            return str(raw.get('type') or 'account').replace('_', ' ')
+
     def rep(m):
-        v = raw.get(m.group(1))
-        return '' if v is None else str(v)
+        return str(raw.get(m.group(1)))
     return re.sub(r'\{(\w+)\}', rep, tpl).strip()
+
+
+def usable(raw):
+    """A product the bank sent without an id, an amount past due or the days late cannot be spoken about or recorded."""
+    try:
+        if not str(raw.get('product_id') or '').strip():
+            return False
+        return float(raw.get(E['f_pd'])) > 0 and int(float(raw.get(E['f_days']))) >= 0
+    except Exception:
+        return False
 
 
 def floor_for(raw):
@@ -441,9 +454,18 @@ def make_product(i, raw, today):
     except Exception:
         am = 1
     return {'i': i, 'id': str(raw.get('product_id') or ('p%d' % (i + 1))), 'type': str(raw.get('type') or ''),
-            'label': label_for(raw), 'pd': pd, 'dl': days, 'fl': fl, 'band': (band or {}).get('name') or '',
+            'label': label_for(raw), 'pd': pd, 'dl': days, 'fl': fl, 'band': band_name(band),
             'am': am, 'dead': iso(dead) if dead else '', 'att': 0, 'status': 'open', 'pend': None, 'vg': 0,
             'tm': False, 'fb': 0, 'amt': None, 'date': '', 'cap': '', 'note': ''}
+
+
+def band_name(band):
+    """A band's name, or "min-max" (the label the spec uses to point at an unnamed band)."""
+    if not band:
+        return ''
+    if band.get('name'):
+        return band['name']
+    return '%s-%s' % (band.get('min'), band.get('max')) if band.get('max') is not None else '%s+' % band.get('min')
 
 
 def def_amt(p):
@@ -657,31 +679,53 @@ def pers_entry(p, n):
     return None
 
 
-def refusal(st, p, lead='', start=False):
-    """A flat refusal (or the start of a product in a multi-product call): make the next persuasion attempt."""
-    today = today_d()
-    if p['att'] >= p['am']:
-        return exhaust(st, p, lead)
-    e = pers_entry(p, p['att'] + 1)
-    if e is None:
-        return exhaust(st, p, lead)
-    p['att'] += 1
-    tok = e.get('amt')
-    if tok == 'floor':
-        a = p['fl']
-    elif tok == 'full_or_floor':
-        a = p['fl'] if p['tm'] else p['pd']
-    else:
-        a = p['pd']
+def attempt_date(p, e, today):
+    """The date a persuasion attempt offers, from the spec token of that attempt."""
     dtok = e.get('date')
+    d = None
     if dtok == 'deadline' and p['dead']:
         d = from_iso(p['dead'])
     elif dtok == 'today':
         d = first_day(today)
-    else:
-        d = persuasion_date(today, CAL) or first_day(today)
+    elif dtok in ('next_business_day', 'capped_next_business_day'):
+        d = next_bd(today, CAL)
+    elif dtok == 'midpoint':
+        n = e.get('bd')
+        if n is None:
+            band = band_for(p['dl'], CAL)
+            n = -(-int((band or {}).get('deadline_bd') or 0) // 2)
+        d = add_bd(today, int(n), CAL) if n else None
+    else:                                          # week_end, unknown
+        d = persuasion_date(today, CAL)
+    d = d or first_day(today)
     if p['dead'] and d > from_iso(p['dead']):
         d = from_iso(p['dead'])
+    return d
+
+
+def refusal(st, p, lead='', start=False):
+    """A flat refusal (or the start of a product in a multi-product call): make the next persuasion attempt.
+    An amount and date pair already put to the customer is never offered again."""
+    today = today_d()
+    hist = p.setdefault('hist', [])
+    while True:
+        if p['att'] >= p['am']:
+            return exhaust(st, p, lead)
+        e = pers_entry(p, p['att'] + 1)
+        if e is None:
+            return exhaust(st, p, lead)
+        p['att'] += 1
+        tok = e.get('amt')
+        if tok == 'floor':
+            a = p['fl']
+        elif tok == 'full_or_floor':
+            a = p['fl'] if p['tm'] else p['pd']
+        else:
+            a = p['pd']
+        d = attempt_date(p, e, today)
+        if [round(a, 2), iso(d)] not in hist:
+            break
+    hist.append([round(a, 2), iso(d)])
     p['pend'] = {'a': a, 'd': iso(d), 'k': 'attempt'}
     st['phase'] = 'nego'
     pre = lead if lead else ('I understand.' if not start else '')
@@ -929,7 +973,16 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
 def turn(st):
     q = S('x_q').lower()
     vars['x_q'] = 'no'
+    if q == 'yes' and st['phase'] == 'confirm' and S('x_intent').lower() == 'agree':
+        for k in ('x_date', 'x_amount', 'x_product'):
+            vars[k] = ''
+        vars['x_intent'] = 'none'
+        return reask(st, 'The customer said yes but also asked something. Answer that first; do not record anything yet.')
     turn_inner(st)
+    if q == 'yes' and vars.get('route') in ('fin', 'note') and not st.get('transfer'):
+        st['defer'] = vars['route']                # answer first; the close follows on the next turn
+        reask(st, 'The customer also asked a question before the call ends. Answer it, then ask nothing further.')
+        return
     if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text'):
         core = vars['say_text']
         ask('The customer also asked a question. First answer it in one short sentence, using only these facts: ' + facts(st) +
@@ -1162,6 +1215,9 @@ def set_create(st):
 
 
 def created(st):
+    if st.get('ackw'):                             # the line after a record was spoken: on to the next promise
+        st['ackw'] = 0
+        return set_create(st)
     ok = S('cp_ok').lower() == 'true'
     p = st['prods'][st['cq'][0]]
     if ok:
@@ -1170,11 +1226,14 @@ def created(st):
         st['tries'] = 0
     else:
         st['tries'] += 1
-        if st['tries'] >= int(E.get('max_tries') or 2):
+        if st['tries'] >= (2 if E.get('max_tries') is None else int(E['max_tries'])):
             p['status'] = 'failed'
             st['cq'].pop(0)
             st['tries'] = 0
     if st['cq']:
+        if ok and E.get('ack_scope') == 'per_record':
+            st['ackw'] = 1
+            return speak('Your promise for %s is recorded. %s' % (p['label'], E['after_recorded']))
         return set_create(st)
     st['phase'] = 'nego'
     conclude(st)
@@ -1186,6 +1245,11 @@ def plan(st):
     today = today_d()
     raws = read_products()
     if today is None or not raws:
+        st['phase'] = 'nego'
+        c = E['create_failed']
+        return set_close(c['outcome'], c['reason'], goodbye('I am sorry, I cannot access your account right now.'))
+    raws = [r for r in raws if usable(r)]
+    if not raws:
         st['phase'] = 'nego'
         c = E['create_failed']
         return set_close(c['outcome'], c['reason'], goodbye('I am sorry, I cannot access your account right now.'))
@@ -1342,7 +1406,10 @@ def transferred(st):
 def main():
     st = load()
     try:
-        if S('x_stance').lower() in ('declines', 'human'):
+        if st.get('defer'):
+            r, st['defer'] = st['defer'], ''
+            route(r)
+        elif S('x_stance').lower() in ('declines', 'human'):
             idv_event(st)
         elif st['phase'] == 'tp':
             tp_turn(st)

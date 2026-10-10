@@ -234,5 +234,105 @@ class ProposalState(unittest.TestCase):
         self.assertEqual(p.v['route'], 'fin')
 
 
+G1 = {'product_id': 'g1', 'type': 'term_loan', 'arrears_balance': '600.0', 'late_days': '10', 'payment_due': '100.0'}
+G2 = {'product_id': 'g2', 'type': 'charge_card', 'card_last4': '4821', 'arrears_balance': '400.0', 'late_days': '10', 'card_floor': '80.0'}
+
+
+def probe_with(name, products, mutate=None, now=NOW):
+    """Probe on an engine whose E was changed by `mutate` first."""
+    E = build_E(spec(name))
+    if mutate:
+        mutate(E)
+    p = Probe.__new__(Probe)
+    p.code = engine_code(E)
+    p.v = {'now': now, 'st': ''}
+    for i, pr in enumerate(products):
+        for k, x in pr.items():
+            p.v['get_account_response.data.products.%d.%s' % (i, k)] = x
+    p.run()
+    return p
+
+
+class Termination(unittest.TestCase):
+    def test_acc06_rejected_pair_is_not_offered_again(self):
+        def same(E):
+            E['pers'] = [{'n': 1, 'amt': 'floor', 'date': 'deadline', 'bands': None},
+                         {'n': 2, 'amt': 'floor', 'date': 'deadline', 'bands': None}]
+        late = dict(PERSONAL, days_late='10')
+        p = probe_with('a', [late], same)
+        p.say('refuse')
+        first = p.prod(0)['pend']
+        self.assertEqual(first['a'], 150.0)
+        p.say('refuse')                                                 # attempt 2 would repeat attempt 1
+        self.assertEqual(p.v['route'], 'fin')
+        self.assertEqual(p.v['close_outcome'], 'no_promise')
+
+    def test_persuasion_date_tokens(self):
+        p = probe_with('g', [G1])
+        today = D(2026, 10, 14)
+        p.say('refuse')
+        self.assertEqual(p.prod(0)['pend']['d'], '2026-10-15')           # capped_next_business_day
+        p.say('refuse')
+        self.assertEqual(p.prod(0)['pend']['d'], p.prod(0)['dead'])      # deadline
+        p.say('refuse')
+        ns = ns_for('g')
+        want = ns['add_bd'](today, 3, ns['CAL'])
+        self.assertEqual(p.prod(0)['pend']['d'], want.isoformat())       # midpoint of a 5 business day band
+        self.assertEqual(len(p.prod(0)['hist']), 3)
+
+    def test_max_tries_zero_is_not_two(self):
+        p = probe_with('ab', [PERSONAL], lambda E: E.update(max_tries=0))
+        p.say('agree')
+        p.say('agree')
+        self.assertEqual(p.v['route'], 'create')
+        p.create(ok=False)
+        self.assertNotEqual(p.v['route'], 'create')
+
+    def test_acc24_question_with_yes_is_answered_before_create(self):
+        p = Probe().say('agree')
+        p.say('agree', q='yes')
+        self.assertEqual(p.v['route'], 'ask')
+        self.assertEqual(p.st['phase'], 'confirm')
+        self.assertIn('do not record anything yet', p.v['instruction'])
+        p.say('agree')
+        self.assertEqual(p.v['route'], 'create')
+
+    def test_acc24_question_is_answered_before_the_close(self):
+        p = Probe().say('agree')
+        p.say('sp_does_not_want_to_talk')
+        p.say('sp_does_not_want_to_talk', q='yes')
+        self.assertEqual(p.v['route'], 'ask')
+        p.say('none')                                                    # whatever they say next, the close follows
+        self.assertEqual(p.v['route'], 'note')
+
+    def test_acc26_missing_account_fields_are_not_invented(self):
+        ns = ns_for()
+        self.assertEqual(ns['label_for']({'type': 'credit_card'}), 'credit card')
+        self.assertEqual(ns['label_for']({'type': 'credit_card', 'card_last4': '4821'}), 'credit card ending 4821')
+        p = probe_with('ab', [{'product_id': 'p1', 'type': 'personal_loan'}])
+        self.assertEqual(p.v['route'], 'fin')
+        self.assertNotIn('0.00', p.v.get('bye_text', ''))
+        p = probe_with('ab', [dict(PERSONAL, product_id=''), CAR])
+        self.assertEqual([x['id'] for x in p.st['prods']], ['p2'])
+
+    def test_acc27_per_record_acknowledgement(self):
+        p = probe_with('g', [G1, G2])
+        p.say('agree')
+        p.say('agree')
+        self.assertEqual(p.v['route'], 'create')
+        p.create()
+        self.assertEqual(p.v['route'], 'say')                            # recorded line before the next create
+        self.assertIn('recorded', p.text)
+        p.say('none')
+        self.assertEqual(p.v['route'], 'create')
+        self.assertEqual(p.v['cp_pid'], 'g2')
+
+    def test_acc27_per_call_has_no_extra_line(self):
+        p = Probe().say('agree')
+        p.say('agree')
+        p.create()
+        self.assertEqual(p.v['route'], 'create')
+
+
 if __name__ == '__main__':
     unittest.main()
