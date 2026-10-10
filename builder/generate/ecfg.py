@@ -147,6 +147,44 @@ def _words(field):
     return _s(field).replace('_', ' ')
 
 
+def _flag_values(node, found=None):
+    """Values of every key whose name contains 'continu' anywhere inside node (True/False/str/list)."""
+    found = [] if found is None else found
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if 'continu' in str(k).lower():
+                found.append((str(k), v))
+            _flag_values(v, found)
+    elif isinstance(node, list):
+        for v in node:
+            _flag_values(v, found)
+    return found
+
+
+def _says_continue(mp, it, act):
+    """True / False when the spec says whether this intent goes on with the other products, None when it does not say.
+    Any spelling counts: a 'continu*' key inside the intent, or in multi_product with a value that is true, names the
+    intent (id) or lists it."""
+    iid = it.get('id')
+    for k, v in _flag_values(it):
+        if v is False or (isinstance(v, str) and v.strip().lower() in ('false', 'no', 'never')):
+            return False
+        if v or v is None:
+            return True
+    for k, v in _flag_values(mp):
+        k_low = k.lower()
+        key_names = bool(iid) and (str(iid).lower() in k_low or (iid == 'already_paid' and 'paid' in k_low))
+        if v is False and key_names:
+            return False
+        if v is False:
+            continue
+        mentions = key_names or (isinstance(v, (list, tuple)) and iid in v) \
+            or (isinstance(v, str) and iid and iid.lower() in v.lower())
+        if mentions:
+            return True
+    return None
+
+
 def normalize_intents(spec):
     out = {}
     mp = spec.get('multi_product') or {}
@@ -187,7 +225,11 @@ def normalize_intents(spec):
             else:
                 c = act['close'] if isinstance(act['close'], dict) else {}
                 d['note_reason'] = c.get('reason') or c.get('outcome')
-            d['continues'] = bool(act.get('continue_with_other_products') or act.get('continue') or iid in cont_ids)
+            says = _says_continue(mp, it, act)
+            if says is None and mp.get('note_tool') and iid in ('dispute', 'already_paid'):
+                says = True        # a multi-product call goes on after a dispute or a paid claim unless the spec says otherwise
+                d['continues_guessed'] = True
+            d['continues'] = bool(says or act.get('continue_with_other_products') or act.get('continue') or iid in cont_ids)
         elif it.get('continue'):
             d['kind'] = 'continue'
         else:
@@ -210,6 +252,9 @@ def _build(spec, warns_out):
     ds = spec.get('debt_statement') or {}
     closing = spec.get('closing') or {}
     intents = normalize_intents(spec)
+    for k_, v_ in intents.items():
+        if v_.get('continues_guessed'):
+            warns_out.append('intent %s: the spec does not say whether the call goes on with the other products; multi-product default is to continue' % v_['id'])
 
     warns = warns_out
     inc0 = ds.get('include') or []

@@ -83,5 +83,41 @@ class Continues(unittest.TestCase):
         self.assertEqual(led['outcome'], 'promise')
 
 
+class ContinuesShapes(unittest.TestCase):
+    def build(self, mutate):
+        spec = copy.deepcopy(load('builder/specs/brief-ab.spec.json'))
+        for it in spec['intents']:
+            if isinstance(it.get('action'), dict):
+                it['action'].pop('continue_with_other_products', None)
+        spec['multi_product'].pop('dispute_or_paid_continues', None)
+        mutate(spec)
+        return ecfg.build_E_warn(spec)
+
+    def test_unsaid_defaults_to_continue_with_a_warning(self):
+        E, warns = self.build(lambda s: None)
+        self.assertTrue(E['intents']['sp_dispute']['continues'])
+        self.assertTrue(E['intents']['sp_already_paid']['continues'])
+        self.assertFalse(E['intents']['sp_restructuring'].get('continues'))
+        self.assertTrue(any('intent dispute' in w for w in warns))
+
+    def test_any_continue_spelling_in_the_intent_or_multi_product(self):
+        def a(s):
+            next(i for i in s['intents'] if i['id'] == 'dispute')['action']['continue_after_note'] = True
+        def b(s):
+            s['multi_product']['continue_after_dispute'] = True
+        def c(s):
+            next(i for i in s['intents'] if i['id'] == 'dispute')['continues'] = True
+        for m in (a, b, c):
+            E, warns = self.build(m)
+            self.assertTrue(E['intents']['sp_dispute']['continues'])
+            self.assertFalse(any('intent dispute' in w for w in warns))
+
+    def test_explicit_no_is_respected(self):
+        def m(s):
+            next(i for i in s['intents'] if i['id'] == 'dispute')['action']['continue_with_other_products'] = False
+        E, _ = self.build(m)
+        self.assertFalse(E['intents']['sp_dispute']['continues'])
+
+
 if __name__ == '__main__':
     unittest.main()
