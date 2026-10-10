@@ -767,7 +767,7 @@
   "rule_coverage": {
     "p1": "context: synthetic data note",
     "p2": "context: read all rules",
-    "p3": "meta.job; bands (1 to 45 days late)",
+    "p3": "meta.job; bands",
     "p4": "call_variables",
     "t1": "call_variables",
     "1": "opening.first_sentence_must_include; opening.forbidden_words_before_verification; opening.forbid_product_name_before_verification; opening.applies_to_everyone_including_relatives",
