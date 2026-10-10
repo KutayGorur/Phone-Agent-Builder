@@ -34,3 +34,14 @@ Code that writes `''` into a variable declared as an extraction enum gets `varia
 - 10 Oct, early: probes `gen-probe`, `gen-probe2`, `gen-probe3`: about 12 chat messages in total, 3 saved workflows.
 - 10 Oct: `gen-a` v1 sim, 10 cases (identity tool pointed at a wrong URL, all failed); v2 sim, 10 cases (platform returned 503 / customers hung up at once); v2 sim, 2 cases (same). 3 sims, 22 calls.
 - 10 Oct 13:3x-13:5x: platform returns 503 on `/chat/message` for every workflow including old probes; `dryRun` validation still works. No further sims until it recovers. Local engine tests (`local_sim.py`, in-process bank) pass for PUB-01, 02, 04..13.
+
+## Sandbox failure cascade (found in a 3-rep Brief A run)
+Once a code run or hook fails with `Sandbox did not return a parseable result`, the platform stores the error text (which contains the marker `__CODE_EXEC_RESULT__` and a dump of `vars`) in `<node>_response.message` / `.error`. Every later code node then fails too, because its `vars` dump contains the marker, and the call hangs until the customer gives up. It happened once in 30 calls (during a slow period). Mitigations in the generator: no pre/post hooks on API nodes (the real mock accepts `"amount": "365.00"` as a string and stores it as a number, checked directly against the mock), fewer sandbox calls per turn, fixed lines spoken by `tts` instead of a model.
+## Speaking
+A model asked to say a given line sometimes improvises from the conversation (said "I have recorded that" before anything was recorded, gave a wrong date). The generator now speaks every policy line with an `on_enter` `tts` node (`say_fixed`) and only uses the model (`say_main`) when the customer asked a question (`x_q = yes`).
+## Routing after a tool result
+`Suppressed: Missing prior assistant message`: after a self-transition (`always` back to the same node) the node is re-entered without an `on_enter` line, so the route evaluation after the tool result is skipped and the call stalls. No self-loops on nodes with tools; leave the node by transition or stay with no matching transition.
+## Shell/heredoc warning (dev only)
+Backslash escapes in Python edit scripts passed through the shell tool were mangled (`\b` became a backspace byte). Check generated files for control characters.
+## Freya call log, continued
+- Brief A: full run 1 rep (10 calls), 4 cases (4), 2 cases (2), 3 reps full (30). Brief B: 3 cases twice (6). Roughly 55 simulated calls today plus about 25 probe/chat calls.

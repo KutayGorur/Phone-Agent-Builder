@@ -850,6 +850,18 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
 # ------------------------------------------------------------------ the turns
 
 def turn(st):
+    q = S('x_q').lower()
+    vars['x_q'] = 'no'
+    turn_inner(st)
+    if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text'):
+        core = vars['say_text']
+        ask('The customer also asked a question. First answer it in one short sentence, using only these facts: ' + facts(st) +
+            '. If the facts do not answer it, say exactly "' + E['unknown_say'] + '". If they ask whether you are a robot or an AI, say "' +
+            E['ai_say'] + '". If they ask whether this call is a scam, say that ' + E['scam_say'] +
+            '. Never invent figures, dates or reasons. Then say exactly this, word for word: ' + core)
+
+
+def turn_inner(st):
     it = S('x_intent').lower()
     dt = S('x_date')
     am = S('x_amount')

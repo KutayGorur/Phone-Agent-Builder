@@ -248,8 +248,9 @@ def generate(spec):
     ivars = ['say_text', 'x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time', 'idv_note',
              'instruction', 'route', 'bye_text', 'close_outcome', 'cp_ok', 'nt_ok', 'cb_ok', 'tr_queue', 'tr_text', 'st']
     ivars += ['idq%d_state' % (i + 1) for i in range(n)]
-    nodes['init'] = code_node('init', ''.join('vars[%s] = \'\'\n' % lit(v) for v in ivars), [tr('idq_1' if n else 'get_account')])
-    nodes['to_tp'] = code_node('to_tp', ''.join('vars[%s] = \'\'\n' % lit(v) for v in ('tp_event', 'tp_date', 'tp_time', 'instruction', 'route')) +
+    enum_init = 'vars["x_intent"] = "none"\nvars["x_stance"] = "other"\nvars["tp_event"] = "other"\nvars["x_q"] = "no"\n'
+    nodes['init'] = code_node('init', enum_init + ''.join('vars[%s] = \'\'\n' % lit(v) for v in ivars), [tr('idq_1' if n else 'get_account')])
+    nodes['to_tp'] = code_node('to_tp', 'vars["tp_event"] = "other"\n' + ''.join('vars[%s] = \'\'\n' % lit(v) for v in ('tp_date', 'tp_time', 'instruction', 'route')) +
                                'vars["st"] = \'{"phase": "tp"}\'\n', [tr('third_party')])
 
     # ---- third party
@@ -323,6 +324,7 @@ def generate(spec):
                   '"end of the month"). Join pieces said in several messages; if they corrected themselves use the corrected one. Empty if none.'),
               ext('x_amount', 'The amount of money the customer says they can pay, as said (digits or words). Join pieces said in several messages; use the '
                   'corrected value if they corrected themselves. Empty if none.')]
+    sm_ext.append(ext('x_q', "yes if the customer's last message contains a question of any kind (for example whether you are a robot, whether this is a scam, why, what, how much), even when it also contains an answer; otherwise no.", ['yes', 'no']))
     if E['use_notes'] or meta.get('multi_product'):
         sm_ext.append(ext('x_product', 'Which product the customer is talking about, if they name one (e.g. "credit card", "personal loan", "car loan"), or '
                           '"all" if they mean everything / both / all of them. Empty if not clear.'))
@@ -335,7 +337,7 @@ def generate(spec):
     # ---- api nodes
     nodes['do_create_promise'] = api_node('do_create_promise', 'create_promise',
                                           {'product_id': ('string', '{{cp_pid}}'), 'amount': ('number', '{{cp_amount}}'), 'date': ('string', '{{cp_date}}')},
-                                          'engine', mapping=[{'path': 'data.ok', 'variable': 'cp_ok'}], pre=AMOUNT_PRE)
+                                          'engine', mapping=[{'path': 'data.ok', 'variable': 'cp_ok'}], pre=None)
     nodes['do_add_note'] = api_node('do_add_note', 'add_note', {'product_id': ('string', '{{nt_pid}}'), 'reason': ('string', '{{nt_reason}}')},
                                     'engine', mapping=[{'path': 'data.ok', 'variable': 'nt_ok'}])
     nodes['do_transfer'] = api_node('do_transfer', 'transfer_to_agent', {'queue': ('string', '{{tr_queue}}')}, 'engine',
@@ -343,7 +345,7 @@ def generate(spec):
     nodes['do_callback'] = api_node('do_callback', 'schedule_callback', {'date': ('string', '{{cb_date}}'), 'time': ('string', '{{cb_time}}')}, 'engine',
                                     mapping=[{'path': 'data.ok', 'variable': 'cb_ok'}])
     nodes['do_close'] = api_node('do_close', 'close_call', {'outcome': ('string', '{{close_outcome}}'), 'reason': ('string', '{{close_reason}}')}, 'hangup',
-                                 pre=CLOSE_PRE, on_enter={'type': 'tts', 'text': '{{bye_text}}'})
+                                 pre=None, on_enter={'type': 'tts', 'text': '{{bye_text}}'})
     nodes['hangup'] = end_node('hangup', 'call_closed')
 
     test_vars = {'customer_id': 'c_test', 'first_name': 'Test', 'last_name': 'Customer', 'title': 'Mr', 'now': '2026-10-14T11:00'}
