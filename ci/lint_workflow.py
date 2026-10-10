@@ -90,6 +90,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     wf = json.load(open(a.workflow, encoding="utf-8"))
+    if set(wf) == {"workflow"}:  # export / dry-run envelope
+        wf = wf["workflow"]
     errs, warns = lint(wf, json.load(open(a.openapi, encoding="utf-8")) if a.openapi else None)
     for w in warns:
         print("WARN", w)
