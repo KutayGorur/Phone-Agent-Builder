@@ -1062,8 +1062,8 @@ def turn_inner(st):
             it, dt, am, pref = r['it'], r['dt'], r['am'], r['pref']
         elif r:
             return
-    if it == E['hard'] and (dt or am) and not st.get('hard_pending'):
-        st['hs'] = {'dt': dt, 'am': am, 'pref': pref}      # a payment offered together with the hardship is kept
+    if it == E['hard'] and (dt or (am and amount_check(am)[0] == 'ok')) and not st.get('hard_pending'):
+        st['hs'] = {'dt': dt, 'am': am if amount_check(am)[0] == 'ok' else '', 'pref': pref}   # "cannot pay anything" is no offer      # a payment offered together with the hardship is kept
     if it in E['intents']:
         if special(st, it, pref):
             return

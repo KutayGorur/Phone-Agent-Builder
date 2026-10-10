@@ -123,7 +123,7 @@ SCEN = {
     'PUB-02': [TP('other'), TP('gives_time', 'tomorrow', 'eleven in the morning')],
     'PUB-03': 'identity',
     'PUB-04': [I('offer', x_date='6 November'), I('agree'), I('question'), I('agree')],
-    'PUB-05': [I('hardship'), I('question'), I('refuse')],
+    'PUB-05': [I('hardship', x_amount='anything'), I('question'), I('refuse')],
     'PUB-06': [I('too_much'), I('too_much'), I('agree'), I('agree')],
     'PUB-07': [I('refuse'), I('offer', x_date='the week after next'), I('offer', x_date='Monday the 26th'), I('agree'), I('agree')],
     'PUB-08': [I('already_paid')],
