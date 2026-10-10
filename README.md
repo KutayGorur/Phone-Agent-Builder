@@ -102,3 +102,24 @@ So build something that reads a brief, not something that knows this one. Whatev
 - The bank answers `unknown product_id`: the model made an id up. Product ids come from `get_account` (`p1`, `p2`, ...). Give them to the model in the tool result, or fill them in with code.
 - A simulation stays at "running" and no call ever starts: the workflow cannot start a call. Try one chat turn. Leave `agent_config` out of the workflow you send.
 - The agent says nothing after a tool call and the customer hangs up: see "Tool results and the next turn" in `docs/tools-and-code.md`.
+
+## Our builder
+
+`builder/build.py` turns brief files plus a tool API file into a phone agent on Freya, with no manual step.
+
+```bash
+source env.sh                       # FREYA_API_KEY, FREYA_BANK_TEAM_KEY (never commit it)
+mkdir -p traces
+python3 builder/build.py <brief> <tool_api> 2>&1 | tee traces/<brief>.log
+python3 builder/build.py <brief_a> <brief_b> <tool_api>        # a brief that builds on another: list both, the tool API file goes last
+```
+
+- The last file is the tool API file; every file before it is a brief. The last brief names the Freya slot and the output.
+- Pipeline: parse (`builder/parse`) -> spec.json -> generate (`builder/generate`) -> `freya.save_workflow` -> optional self-test and fix -> `freya.export_workflow`. The contract between the stages is `builder/SPEC_CONTRACT.md`.
+- Output: `out/<brief>.workflow.json` (submit this), `out/<brief>.spec.json` (the parsed spec), and the trace `traces/<brief>-<time>.trace.txt`.
+- The trace lists start and end time, every model call (model and purpose, recorded by the stages through `builder.trace.model_call`), the Freya resources created or updated, and any self-test with its result. API keys are redacted. The `tee` copy of the console output is the same text.
+- Time: the whole run stays inside 27 minutes by default (`--budget-min`); the event allows 30. Parse and generate get time slices, and a self-test round is only started if enough time is left for a full practice run.
+- `--selftest` runs the practice customers (`tools/run_cases.py`) on the built agent, and if `builder/fix.py` provides `fix(spec, workflow, failed_ids) -> workflow`, applies fixes for up to `--max-fix-rounds` rounds. Practice customers are written for Brief A and B, so on unseen briefs the score is a smoke test, not a verdict. Use `--selftest-brief A|B` to pick the practice set.
+- If generate fails or the workflow does not validate, the builder falls back to `examples/base-agent.json`, so a valid agent is always exported; the trace says `status=degraded`.
+- Re-running a brief updates the same Freya workflow in place (state in `.freya-agents.json`), so the workspace is not filled up.
+- Until the parser and generator land, `build.py` uses stubs that export the example agent; the trace says so.
