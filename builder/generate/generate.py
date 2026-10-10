@@ -261,7 +261,7 @@ def generate(spec):
               ext('tp_time', 'The time of day the person names, in their own words, with morning/afternoon if said (e.g. "eleven in the morning"). Empty if none.')]
     tp_task = ('You are speaking to somebody who is NOT the customer. ' + secrecy + 'You may only ask when the customer can be reached '
                '(a day and a time). ')
-    nodes['third_party'] = conv('third_party', tp_task + 'Say that you can only speak to {{title}} {{last_name}} and ask when they can be reached.',
+    nodes['third_party'] = conv('third_party', tp_task + 'Say that you can only speak to ' + E['who'] + ' and ask when they can be reached.',
                                 tp_ext, [tr('engine')])
     nodes['tp_say'] = conv('tp_say', tp_task + '{{instruction}}', tp_ext, [tr('engine')])
 

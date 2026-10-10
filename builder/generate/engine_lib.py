@@ -352,6 +352,13 @@ def floor_for(raw):
         v = float(raw.get(f)) if f and raw.get(f) not in (None, '') else None
     except Exception:
         v = None
+    fm = (E.get('formula') or {}).get(raw.get('type'))
+    if v is None and isinstance(fm, dict):
+        try:
+            base = float(raw.get(fm.get('field') or E['f_pd']))
+            v = round(base * float(fm.get('percent_of_field')) / 100.0 + 0.004999, 2)
+        except Exception:
+            v = None
     return v
 
 
@@ -372,11 +379,11 @@ def read_products():
 
 def make_product(i, raw, today):
     try:
-        pd = float(raw.get('past_due'))
+        pd = float(raw.get(E['f_pd']))
     except Exception:
         pd = 0.0
     try:
-        days = int(float(raw.get('days_late')))
+        days = int(float(raw.get(E['f_days'])))
     except Exception:
         days = 0
     band = band_for(days, CAL)
@@ -413,7 +420,7 @@ def multi(st):
 def facts(st):
     lines = []
     for p in st['prods']:
-        s = '%s: %s past due, %d days late' % (p['label'], money(p['pd']), p['dl'])
+        s = '%s: %s %s, %d days %s' % (p['label'], money(p['pd']), E['pd_word'], p['dl'], E['days_word'])
         if p['fl'] and p['fl'] < p['pd']:
             s += ', %s %s' % (floor_word(p), money(p['fl']))
         if p['dead']:
@@ -871,6 +878,9 @@ def turn(st):
     if it in ('refuse', 'evasive'):
         return refusal(st, p)
     if it == 'too_much':
+        pe = p.get('pend')
+        if p['tm'] and pe and pe['a'] + 0.004 < p['pd']:
+            return reask(st)          # repeating "the full amount is too much" is not a refusal of the floor already offered
         p['tm'] = True
         return refusal(st, p)
     if it in ('offer', 'change'):
@@ -1010,10 +1020,10 @@ def plan(st):
     st['prods'] = prods
     st['phase'] = 'nego'
     n = len(prods)
-    sents = ['Your %s is %s past due and %d days late.' % (p['label'], money(p['pd']), p['dl']) for p in prods]
+    sents = ['Your %s is %s %s and %d days %s.' % (p['label'], money(p['pd']), E['pd_word'], p['dl'], E['days_word']) for p in prods]
     say = E['debt_say']
     if n > 1:
-        say = say.replace('a late payment', 'late payments')
+        say = say.replace('a late payment', 'late payments').replace('an overdue payment', 'overdue payments')
     head = 'I am %s.' % say
     if n == 1:
         p = prods[0]
@@ -1052,6 +1062,22 @@ def idv_event(st):
     route('idq_%d' % qi)
 
 
+def cb_check(d, m, today):
+    """check_callback with support for 'today_or_next_N_business_days'."""
+    days = str(CAL.get('cb_days') or '')
+    mm = re.search(r'next_(\w+?)_business_days', days)
+    if not mm:
+        return check_callback(iso(d), fmt_time(m), today, now_min(), CAL)
+    dg = digitize(mm.group(1).replace('_', ' '))
+    n = int(dg) if dg.isdigit() else 2
+    cfg = dict(CAL)
+    cfg['cb_days'] = 'any_business_day'
+    s, dd, mm2 = check_callback(iso(d), fmt_time(m), today, now_min(), cfg)
+    if s == 'ok' and d != today and d > (add_bd(today, n, CAL) or today):
+        s = 'bad_day'
+    return s, dd, mm2
+
+
 def tp_turn(st):
     ev = S('tp_event').lower()
     dt = S('tp_date')
@@ -1078,13 +1104,13 @@ def tp_turn(st):
     if d is None and t_cands and not dt:
         nb = next_bd(today, CAL)
         d = today
-        res = [check_callback(iso(today), fmt_time(m), today, now_min(), CAL)[0] for m in t_cands]
+        res = [cb_check(today, m, today)[0] for m in t_cands]
         if 'ok' not in res and nb:
             d = nb
     if d is not None and t_cands:
         best = None
         for m in t_cands:
-            s, dd, mm = check_callback(iso(d), fmt_time(m), today, now_min(), CAL)
+            s, dd, mm = cb_check(d, m, today)
             if s == 'ok':
                 best = (iso(d), fmt_time(m))
                 break

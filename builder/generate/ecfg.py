@@ -33,7 +33,7 @@ def _oc(d):
                 return r
     reason = d.get('reason')
     if reason is None:
-        n = d.get('note')
+        n = d.get('note') if d.get('note') else d.get('add_note')
         if isinstance(n, dict):
             reason = n.get('reason')
         elif isinstance(n, str):
@@ -94,12 +94,12 @@ def normalize_intents(spec):
             d['queue'] = act['transfer']
             d['close'] = _oc(act.get('close') if isinstance(act.get('close'), dict) else {})
             d['transfer_say'] = 'I am transferring you now.'
-        elif act.get('note') or act.get('close'):
-            d['kind'] = 'note' if act.get('note') else 'close'
+        elif act.get('note') or act.get('add_note') or act.get('close'):
+            d['kind'] = 'note' if (act.get('note') or act.get('add_note')) else 'close'
             if isinstance(act.get('close'), dict):
                 d['close'] = _oc(act['close'])
-            if act.get('note'):
-                d['note_reason'] = _oc({'note': act['note']})['reason']
+            if act.get('note') or act.get('add_note'):
+                d['note_reason'] = _oc({'note': act.get('note') or act.get('add_note')})['reason']
             else:
                 c = act['close'] if isinstance(act['close'], dict) else {}
                 d['note_reason'] = c.get('reason') or c.get('outcome')
@@ -128,9 +128,10 @@ def build_E(spec):
     intents = normalize_intents(spec)
 
     floor_field = amts.get('floor_field_by_product') or {}
-    floor_word = {t: _words(f) for t, f in floor_field.items()}
-    if 'minimum_payment' in floor_field.values():
-        floor_word = {t: ('minimum payment' if f == 'minimum_payment' else _words(f)) for t, f in floor_field.items()}
+    floor_word = {t: _words(f) for t, f in floor_field.items() if f}
+    floor_word = {t: ('minimum payment' if (f or '') in ('minimum_payment', 'minimum_due') else _words(f)) for t, f in floor_field.items() if f}
+    for t in (amts.get('floor_formula_by_product') or {}):
+        floor_word.setdefault(t, 'minimum payment')
 
     pe = []
     for i, a in enumerate(pers.get('attempts') or []):
@@ -167,7 +168,7 @@ def build_E(spec):
            'r_nopromise': exh['outcome'], 'r_transfer': (tr[0]['close']['outcome'] if tr else (tro.get('outcome') if tro else None))}
 
     cf = conf.get('on_create_failed') or {}
-    cfr = cf.get('reason')
+    cfr = cf.get('reason') or _oc(cf)['reason']
     if mp and mp.get('create_promise_failure'):
         cfr = _oc({'note': (mp['create_promise_failure'] or {}).get('note')})['reason'] or cfr
     if not cfr and nop:
@@ -187,10 +188,23 @@ def build_E(spec):
     bt = (cb.get('window_start'), cb.get('window_end'))
     goodbye = 'Thank you for your time. Goodbye.'
 
+    inc = ds.get('include') or []
+    f_pd = amts.get('past_due_field') or (inc[0] if len(inc) > 0 else 'past_due')
+    b0 = (spec.get('bands') or [{}])[0]
+    f_days = b0.get('days_late_field') or (inc[1] if len(inc) > 1 else 'days_late')
+    pd_word = 'past due' if 'past' in f_pd else 'overdue'
+    days_word = 'late' if 'late' in f_days else ('past due' if 'past' in f_days else 'overdue')
     first_q = pers.get('first_question') or 'Can you make this payment today?'
     say = ds.get('say') or 'calling about a late payment'
+    if not re.match(r'^(calling|from|about|phoning)', say.strip().lower()):
+        say = 'calling about your overdue products'
+    cq = op_confirm = opening.get('confirm_identity_question') or 'Am I speaking with {title} {last_name}?'
+    mwho = re.search(r'with (.+?)\?', cq)
+    who = (mwho.group(1) if mwho else '{title} {last_name}').replace('{', '{{').replace('}', '}}')
+    formula = amts.get('floor_formula_by_product') or {}
     E = {
-        'cal': cal, 'acct_node': 'get_account', 'pn': ds.get('product_names') or {}, 'floor_field': floor_field,
+        'cal': cal, 'acct_node': 'get_account', 'f_pd': f_pd, 'f_days': f_days, 'pd_word': pd_word, 'days_word': days_word,
+        'who': who, 'formula': formula, 'pn': ds.get('product_names') or {}, 'floor_field': floor_field,
         'floor_word': floor_word, 'first_q': first_q, 'first_q_all': 'Can you pay all of these today?',
         'confirm_q': conf.get('confirm_question') or 'Do you confirm?',
         'after_recorded': conf.get('after_recorded_say') or '', 'goodbye': goodbye, 'debt_say': say,
