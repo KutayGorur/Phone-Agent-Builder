@@ -32,3 +32,14 @@ Graph (node ids):
 
 ## Update (10 Oct, later)
 Built: `ecfg.py`, `generate.py`, `local_sim.py` (scripted extractions + in-process bank + real scorer; all of PUB-01,02,04..13 pass), identity hooks unit-checked. `python -m builder.generate.generate <spec> <out.json>`. Generated for A, A+B, C, D, E; `harness/preflight.py` = 0 errors for all. Freya returned 503 on every chat call (even old probe workflows) from about 13:35 UTC; `gen-a` is saved (v2) but never ran end to end. Next: when Freya recovers, one chat message, then `python ci/sim.py <agent_id> --workflow out/gen-a.workflow.json --brief A --only PUB-01,PUB-09 --why ...`, read transcripts (`dev/showcall.py results/x.json PUB-01`), fix, then more cases. Untested on platform: extraction accuracy, identity tool calls, farewell tts before close_call, `end_call` node.
+
+## Status (10 Oct, ~15:00 UTC)
+- `gen-a` (agent 44fa9bd3-...) and `gen-ab` (bc15d11e-...) deployed from `out/gen-a.workflow.json`, `out/gen-ab.workflow.json` (regenerate: `python -m builder.generate.generate <spec> <out>`; the builder entry point calls `builder.generate.generate(spec)`).
+- Brief A: 9/10 (1 rep), then 7/10 strict over 3 reps (platform slow: median agent turn 7 to 24 s). Brief B: 3/3 (1 rep, twice).
+- Open failures, all seen at least once:
+  1. PUB-10: the judge flags the mandated opening "this call is recorded" against the check "does not say 'recorded' before a successful call" (judge noise, passed in other runs). Possible hedge: none that keeps rule 1.
+  2. PUB-06: "minimum offered once": when the customer asks "how much is the minimum?" the engine re-asks the offer (model answers + repeats), judge counts two offers.
+  3. Sandbox flakes (`Failed to reach snekbox`, `Sandbox did not return a parseable result`) during slow periods: see PLATFORM_NOTES.md. Guards in place: API nodes re-enter only while their result var is `pending`; no hooks on API nodes. Still using hooks on the identity tools (needed for DOB normalising and the state variable); if flakes keep hitting identity, replace the post hook by conditions on `verify_<field>_response.data.verified` / `wrong_answers_left`.
+  4. `x_q` (question asked together with an answer) added after PUB-04 failed on "Am I talking to a robot? I accept ..."; not yet re-tested on the platform in a calm period.
+- Not tested on the platform: styles (`--style pieces|corrects|talkative|asks_back|in_words`), variants C/D/E, 3-rep Brief B, `hangup` farewell order (seems fine: bye line is spoken by `do_close` before `close_call`).
+- Local: `python builder/generate/local_sim.py` (41 scripted scenarios over A, B, C, D, E with the stand-in bank and the real scorer) must stay green.
