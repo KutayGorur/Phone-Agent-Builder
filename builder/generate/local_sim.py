@@ -19,7 +19,7 @@ API = load('tools/openapi.json')
 CASES = load('public-test-set.json')
 
 
-def drive_identity(spec, case, bank, sess, cid):
+def drive_identity(spec, case, bank, sess, cid, raw=False):
     """Identity phase: replay the answers through the generated hooks and the bank; the check must end."""
     wf = generate(spec)
     qs = spec['identity']['questions']
@@ -42,17 +42,19 @@ def drive_identity(spec, case, bank, sess, cid):
     if f.get('reason'):
         body['reason'] = f['reason']
     bank.tool('close_call', body)
-    return score_ledger(case, bank.ledger(cid))
+    return bank.ledger(cid) if raw else score_ledger(case, bank.ledger(cid))
 
 
-def drive(spec, case, steps, verbose=False, api=None, cases=None):
-    """steps: one dict of extraction vars (x_intent, x_date, ... or tp_event ...) per customer turn."""
+def drive(spec, case, steps, verbose=False, api=None, cases=None, raw=False, cycle=False):
+    """steps: one dict of extraction vars (x_intent, x_date, ... or tp_event ...) per customer turn.
+    raw: return the bank's ledger instead of the score. cycle: when the steps run out (or the call closes early) the
+    customer repeats the last step until the call closes, and steps left after the close are ignored (generated scenarios)."""
     code = engine_code(build_E(spec))
     bank = Bank(api or API, cases or CASES)
     sess = bank.new_session(case['id'])['variables']
     cid = sess['customer_id']
     if case.get('wrong_script'):
-        return drive_identity(spec, case, bank, sess, cid)
+        return drive_identity(spec, case, bank, sess, cid, raw)
     v = {'now': sess['now'], 'st': '', 'customer_id': cid}
 
     def tool(name, body):
@@ -102,8 +104,11 @@ def drive(spec, case, steps, verbose=False, api=None, cases=None):
             r = engine()
         raise RuntimeError('route loop')
     r = 'say' if third_party else follow(engine())
-    for s in steps:
+    steps = list(steps)
+    for s in steps + ([steps[-1]] * 14 if cycle and steps else []):
         if r == 'closed':
+            if cycle:
+                break
             raise RuntimeError('steps left after close: %s' % s)
         v.update(s)
         if verbose:
@@ -111,7 +116,7 @@ def drive(spec, case, steps, verbose=False, api=None, cases=None):
         r = follow(engine())
     if r != 'closed':
         raise RuntimeError('not closed, last route %s' % r)
-    return score_ledger(case, bank.ledger(cid))
+    return bank.ledger(cid) if raw else score_ledger(case, bank.ledger(cid))
 
 
 BUILTIN = ('agree', 'refuse', 'too_much', 'offer', 'evasive', 'question', 'none')
@@ -212,6 +217,10 @@ if __name__ == '__main__':
     for x, scen in VARIANTS.items():
         p = 'out/e2e/brief-%s.spec.json' % x
         cands = [p, 'builder/specs/brief-%s.spec.json' % x, 'out/brief-%s.spec.json' % x, 'out/%s.spec.json' % x]
-        spec = load(next(c for c in cands if os.path.exists(os.path.join(ROOT, c))))
+        found = next((c for c in cands if os.path.exists(os.path.join(ROOT, c))), None)
+        if found is None:       # generated specs of the variant briefs live under out/ (gitignored): skip them on a fresh clone
+            print('SKIP %s: no saved spec (%s)' % (x.upper(), ', '.join(cands)))
+            continue
+        spec = load(found)
         bad += run_set(x.upper(), spec, load('test-briefs/tools-%s.openapi.json' % x), load('test-briefs/cases-%s.json' % x), scen, v)
     sys.exit(1 if bad else 0)

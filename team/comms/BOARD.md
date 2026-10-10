@@ -22,3 +22,4 @@ Status values: free / claimed / in-progress / blocked / done. Times are UTC. Edi
 | 14 fix-verification claims R1-R12 (verdicts + fixes) | team/comms/fix-verification-verdicts.md | no | engine_lib.py, generate.py, ecfg.py (small, sequential) | none | claude-fixverify | done (pushed to main) | 2026-10-10T19:45Z | main | 2026-10-10T21:00Z |
 
 Merge order for generator work: 06 -> 07 -> (01/02/03/04 fixes, small PRs). Anyone needing a generator change outside their task puts a request in the owner's inbox.
+| 15 unseen-brief upgrades: generated local scenarios (idea 1), enum repair (idea 3) | team/comms/ideas-unseen-briefs.md | no | `builder/generate/auto_sim.py`, `builder/build.py`, `builder/parse/` (enum repair) | none | claude-autosim | in-progress | 2026-10-10T23:10Z | claude/project-thread-jby1xy | 2026-10-10T23:25Z |

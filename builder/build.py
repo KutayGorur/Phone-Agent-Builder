@@ -154,6 +154,40 @@ def readiness_problems(spec):
     return probs
 
 
+def local_scenarios(spec, tool_api, out_dir, stem, t, seconds):
+    """Generated customers (builder/generate/auto_sim.py) through the compiled engine and the in-process stand-in bank. Free:
+    no Freya calls, no model calls. Findings are compiler gaps; they go to the trace and out/<stem>.autosim.txt and do not
+    change the build status. Skipped (with a note) when the spec is not ready or the tool API is not an OpenAPI file."""
+    run = _load("generate.auto_sim", "run")
+    if run is None:
+        t.note("generated local scenarios skipped: builder.generate.auto_sim not available"); return
+    if readiness_problems(spec):
+        t.note("generated local scenarios skipped: spec not ready"); return
+    try:
+        api = json.loads(pathlib.Path(tool_api).read_text(encoding="utf-8-sig"))
+    except Exception as e:  # noqa: BLE001
+        t.note(f"generated local scenarios skipped: tool API unreadable ({e!r})"); return
+    if not isinstance(api, dict) or not api.get("paths"):
+        t.note("generated local scenarios skipped: tool API has no paths"); return
+    try:
+        res = _run_limited(lambda s, a: run(s, a, deadline=time.time() + seconds - 2, echo=False), (spec, api), seconds, "generated local scenarios")
+    except Exception as e:  # noqa: BLE001
+        t.note(f"generated local scenarios could not run: {e!r}"); return
+    lines = [f"{n}: {'; '.join(p)}" for n, p in res["failed"]]
+    try:
+        (pathlib.Path(out_dir) / f"{stem}.autosim.txt").write_text("\n".join(lines + res["errors"]) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+    if res["failed"]:
+        t.error(f"generated local scenarios: {len(res['failed'])} of {res['total']} failed (compiler gaps for this brief; full list in {stem}.autosim.txt)")
+        for ln in lines[:10]:
+            t.error("  autosim " + ln[:300])
+    else:
+        t.note(f"generated local scenarios: all {res['total']} passed (identity, dates, amounts, intents, third party, tool failure)")
+    for e in res["errors"]:
+        t.note("generated local scenarios: " + e)
+
+
 def parse_results(text):
     m = re.search(r"(\d+)\s*/\s*(\d+)\s+passed", text)
     failed = re.findall(r"^FAIL\s+(\S+)", text, re.M)
@@ -307,6 +341,9 @@ def main(argv=None):
                 t.error("workflow does not match the supplied tool API, build will be labelled degraded: " + "; ".join(cp[:8]))
             else:
                 t.note("tool contract check: every request field, path and response binding matches the supplied tool API")
+
+        t.stage("local scenarios")
+        local_scenarios(spec, tool_api, out_dir, stem, t, min(120, max(left() * 0.15, 20)))
 
         if a.dry_run:
             out_path = str(out_dir / f"{stem}.workflow.json")
