@@ -1,0 +1,1004 @@
+{
+ "meta": {
+  "bank_name": "Morrow Bank",
+  "language": "en",
+  "multi_product": false,
+  "max_products": 1,
+  "product_type": "payment_card",
+  "overdue_days_min": 1,
+  "overdue_days_max": 36,
+  "job": "Collections calls to customers with one payment card that is 1 to 36 days overdue: open, establish presence, verify, retrieve the account, state the balance, seek a promise, close.",
+  "complete_policy_no_inheritance": true
+ },
+ "call_variables": [
+  {
+   "name": "customer_id",
+   "meaning": "pass to every tool call"
+  },
+  {
+   "name": "first_name",
+   "meaning": "the person to ask for"
+  },
+  {
+   "name": "last_name",
+   "meaning": "the person to ask for"
+  },
+  {
+   "name": "title",
+   "meaning": "address the customer as title plus last name"
+  },
+  {
+   "name": "now",
+   "format": "YYYY-MM-DDTHH:MM",
+   "meaning": "current date and time; use instead of the actual clock"
+  }
+ ],
+ "opening": {
+  "first_sentence": "I am Morrow Bank's digital assistant calling from Morrow Bank; this call is recorded.",
+  "first_sentence_must_include": [
+   "Morrow Bank's digital assistant",
+   "calling from Morrow Bank",
+   "this call is recorded"
+  ],
+  "forbidden_words_before_verification": [
+   "collections",
+   "debt",
+   "payment"
+  ],
+  "forbid_product_name_before_verification": true,
+  "forbid_account_details_before_verification": true,
+  "applies_to_everyone_including_relatives": true,
+  "confirm_identity_question": "Am I speaking with {title} {last_name}?",
+  "accepted_confirmations": [
+   "yes",
+   "that's me",
+   "speaking",
+   "<customer's own name>"
+  ],
+  "not_confirmations": [
+   "hello",
+   "go ahead",
+   "who is this"
+  ],
+  "max_confirmation_asks": 2,
+  "question_answered_before_next_ask": true,
+  "on_unclear": {
+   "outcome": "unreached",
+   "reason": "unclear"
+  },
+  "ai_question_answer": "I am Morrow Bank's digital assistant.",
+  "scam_question_answer": "the caller may check with Morrow Bank's customer-service number; do not invent a number"
+ },
+ "third_party": {
+  "no_account_details_or_reason_for_calling": true,
+  "ask_when_can_be_reached": true,
+  "callback": {
+   "allowed_days": "today_or_next_business_day",
+   "window_start": "08:45",
+   "window_end": "17:15",
+   "inclusive": true,
+   "must_be_after_now": true,
+   "max_out_of_window_asks": 1,
+   "tool": "schedule_callback",
+   "on_scheduled": {
+    "outcome": "unreached",
+    "reason": "return_call"
+   },
+   "on_failed": {
+    "outcome": "unreached",
+    "reason": "no_return",
+    "when": "second invalid offer or schedule_callback failure"
+   }
+  },
+  "wrong_number": {
+   "outcome": "unreached",
+   "reason": "wrong_contact"
+  },
+  "deceased": {
+   "say": "Please accept my condolences.",
+   "ask_nothing_else": true,
+   "outcome": "unreached",
+   "reason": "deceased"
+  },
+  "relative_may_not_verify_or_pay": true
+ },
+ "identity": {
+  "questions": [
+   {
+    "field": "membership_year",
+    "ask": "your membership year",
+    "format": "4 digits",
+    "brief_wording": "membership_year (four digits)"
+   },
+   {
+    "field": "postal_code",
+    "ask": "your postal code",
+    "format": "4 digits",
+    "preserve_leading_zeros": true,
+    "brief_wording": "postal_code (four digits)"
+   }
+  ],
+  "one_at_a_time": true,
+  "tool": "verify_identity",
+  "both_must_pass_before_get_account": true,
+  "max_wrong_answers_total": 2,
+  "unreadable_answer": {
+   "counts_as_wrong": false,
+   "treat_as": "service error",
+   "action": "ask again without revealing the correct answer"
+  },
+  "hints": null,
+  "on_failed": {
+   "do_not_state_debt": true,
+   "no_account_retrieval": true,
+   "say": "Please use Morrow Bank's app or visit a branch.",
+   "outcome": "unverified",
+   "reason": "bad_answers"
+  },
+  "on_declined": {
+   "explain_once": "the questions protect the account",
+   "max_refusals": 2,
+   "outcome": "unverified",
+   "reason": "refused_security",
+   "asking_purpose_counts_as_refusal": true
+  }
+ },
+ "debt_statement": {
+  "after": "get_account",
+  "only_after_verification": true,
+  "say": "I am calling from the collections team about a late payment",
+  "product_names": {
+   "payment_card": "payment card ending {card_last4}"
+  },
+  "include": [
+   "overdue_balance",
+   "overdue_days"
+  ]
+ },
+ "calendar": {
+  "business_days": [
+   "Mon",
+   "Tue",
+   "Wed",
+   "Thu",
+   "Fri"
+  ],
+  "holidays": [
+   "2026-12-16",
+   "2026-12-28",
+   "2027-01-06"
+  ],
+  "deadline_count": "count business days after today, excluding today"
+ },
+ "bands": [
+  {
+   "name": "first",
+   "days_late_field": "overdue_days",
+   "days_late_min": 1,
+   "days_late_max": 4,
+   "deadline": {
+    "business_days_after_today": 9
+   },
+   "persuasion_attempts": 1,
+   "source": "14"
+  },
+  {
+   "name": "second",
+   "days_late_field": "overdue_days",
+   "days_late_min": 5,
+   "days_late_max": 36,
+   "deadline": {
+    "business_days_after_today": 4
+   },
+   "persuasion_attempts": 2,
+   "source": "14"
+  }
+ ],
+ "dates": {
+  "promise_date_rule": "today_or_later AND business_day AND <= deadline",
+  "non_business_day_before_deadline": "offer the next business day only if it is still within the deadline; otherwise offer the deadline",
+  "after_deadline": "offer the deadline; rejection of that offer = flat refusal",
+  "past_date": "invalid; ask for a valid day, never silently move it",
+  "vague_period": "ask_once_then_propose_deadline",
+  "next_weekday_means": "following_calendar_week",
+  "this_weekday_means": "current_calendar_week",
+  "resolve_against": "now",
+  "resolve_then_validate": true
+ },
+ "amounts": {
+  "first_ask": "full_past_due",
+  "past_due_field": "overdue_balance",
+  "never_ask_customer_for_amount": true,
+  "floor_field_by_product": {
+   "payment_card": "required_payment"
+  },
+  "floor_never_inferred_percentage": true,
+  "floor_offers": 1,
+  "floor_note": "The remainder stays overdue.",
+  "floor_refusal": "flat refusal",
+  "floor_offer_exception": "attempt 2 may offer the floor again on the deadline; this is the only exception to the once-only floor offer",
+  "accept_range": "required_payment <= amount <= overdue_balance",
+  "below_floor": "say it cannot be recorded and offer the floor once; rejection = flat refusal",
+  "above_balance": "offer the overdue_balance instead of recording the excess"
+ },
+ "persuasion": {
+  "first_question": "Can you pay the full overdue balance today?",
+  "customer_proposed_date_or_amount_is_never_a_refusal": true,
+  "flat_refusal_definition": "a flat no without an amount or date, or a non-answer; each triggers the next persuasion attempt",
+  "attempts": [
+   {
+    "n": 1,
+    "amount": "full overdue_balance, or floor (required_payment) if the customer already said the full amount is unaffordable",
+    "date": "next business day after today, capped at the deadline"
+   },
+   {
+    "n": 2,
+    "amount": "floor",
+    "date": "deadline",
+    "bands": [
+     "second"
+    ]
+   }
+  ],
+  "do_not_repeat_refused_offer": "never repeat an identical rejected amount/date pair",
+  "not_wanting_to_talk_adds_no_attempts": true,
+  "on_exhausted": {
+   "outcome": "unpledged",
+   "reason": "rejected"
+  }
+ },
+ "confirmation": {
+  "readback": [
+   "product",
+   "amount",
+   "full_date"
+  ],
+  "confirm_question": "Is this your payment commitment?",
+  "create_only_after_clear_yes": true,
+  "qualified_yes_counts": false,
+  "recheck_changes_against": [
+   "dates",
+   "amounts"
+  ],
+  "after_change": "revalidate, read the complete promise again and get a fresh clear yes",
+  "one_promise_per_product": true,
+  "change_after_record": "say changes are possible in the bank app; a recorded promise cannot be changed or cancelled in this call",
+  "tool": "create_promise",
+  "say_recorded_only_if_ok_true": true,
+  "create_promise_max_tries": 2,
+  "retry_with_same_values": true,
+  "on_create_failed": {
+   "say": "the promise was not recorded",
+   "outcome": "unpledged",
+   "reason": "write_error"
+  },
+  "after_recorded_say": "A confirmation will appear in your secure inbox.",
+  "on_recorded_close": {
+   "outcome": "pledged",
+   "reason": null
+  }
+ },
+ "intents": [
+  {
+   "id": "already_paid",
+   "description": "customer says they already paid this overdue balance",
+   "say": "Payments can take two business days to appear.",
+   "no_promise": true,
+   "action": {
+    "close": {
+     "outcome": "reported_paid",
+     "reason": null
+    }
+   },
+   "source": "33"
+  },
+  {
+   "id": "dispute",
+   "description": "ownership dispute (debt not mine, never had this product) or a claim that the product was closed or paid off in the past; this is not already paid this balance",
+   "do_not_argue": true,
+   "no_promise": true,
+   "action": {
+    "close": {
+     "outcome": "unpledged",
+     "reason": "challenged"
+    }
+   },
+   "source": "34"
+  },
+  {
+   "id": "restructuring",
+   "description": "explicit request for a new plan or lower payments, without hardship; do not describe a plan",
+   "action": {
+    "transfer": "plan_desk",
+    "close": {
+     "outcome": "routed",
+     "reason": "plan_request"
+    }
+   },
+   "brief_wording": "plan_request",
+   "source": "26"
+  },
+  {
+   "id": "human",
+   "ask_once_first": "ask once whether the assistant can help; transfer only if the customer insists",
+   "applies": "before_and_after_verification",
+   "action": {
+    "transfer": "contact_desk",
+    "close": {
+     "outcome": "routed",
+     "reason": "human_request"
+    }
+   },
+   "source": "27"
+  },
+  {
+   "id": "hardship",
+   "description": "illness, bereavement or job loss",
+   "say": "one sympathy sentence",
+   "no_persuasion": true,
+   "offer_transfer": "care_desk",
+   "overrides": [
+    "23",
+    "24",
+    "26"
+   ],
+   "overrides_in_same_turn": [
+    "flat refusal",
+    "plan request"
+   ],
+   "promise_if_customer_names_date_or_amount": true,
+   "on_accept": {
+    "transfer": "care_desk",
+    "close": {
+     "outcome": "routed",
+     "reason": "care"
+    }
+   },
+   "on_decline": {
+    "condition": "declined with no volunteered amount or date proposal",
+    "close": {
+     "outcome": "unpledged",
+     "reason": "vulnerability"
+    }
+   },
+   "source": "25"
+  },
+  {
+   "id": "scam",
+   "say": "you may check this call with Morrow Bank's customer-service number",
+   "do_not_invent_number": true,
+   "continue": true,
+   "source": "4"
+  },
+  {
+   "id": "unknown_question",
+   "description": "a question that cannot be answered from the tools",
+   "say": "I do not have that information.",
+   "never_invent": [
+    "amounts",
+    "dates",
+    "reasons",
+    "rates",
+    "fees"
+   ],
+   "continue": true,
+   "continue_current_stage": true,
+   "source": "35"
+  },
+  {
+   "id": "does_not_want_to_talk",
+   "max": 2,
+   "close_verified": {
+    "outcome": "unpledged",
+    "reason": "rejected"
+   },
+   "close_unverified": {
+    "outcome": "unverified",
+    "reason": "refused_security"
+   },
+   "does_not_add_persuasion_attempts": true,
+   "source": "36"
+  }
+ ],
+ "multi_product": null,
+ "closing": {
+  "goodbye_before_close": true,
+  "close_tool": "close_call",
+  "exactly_one_close_call_and_it_is_last": true,
+  "no_tool_after_close": true,
+  "outcomes": [
+   {
+    "outcome": "pledged",
+    "reasons": [],
+    "when": "promise recorded with ok=true (rule 32)"
+   },
+   {
+    "outcome": "reported_paid",
+    "reasons": [],
+    "when": "rule 33"
+   },
+   {
+    "outcome": "routed",
+    "reasons": [
+     "plan_request",
+     "human_request",
+     "care"
+    ],
+    "when": "rules 26, 27, 25, 38"
+   },
+   {
+    "outcome": "unpledged",
+    "reasons": [
+     "rejected",
+     "vulnerability",
+     "challenged",
+     "write_error"
+    ],
+    "when": "rules 24 and 36, 25, 34, 31"
+   },
+   {
+    "outcome": "unverified",
+    "reasons": [
+     "bad_answers",
+     "refused_security"
+    ],
+    "when": "rules 10, 11, 36"
+   },
+   {
+    "outcome": "unreached",
+    "reasons": [
+     "return_call",
+     "no_return",
+     "wrong_contact",
+     "deceased",
+     "unclear"
+    ],
+    "when": "rules 6, 6, 7, 7, 3"
+   }
+  ],
+  "transfer_after_promise": "any transfer wins over a recorded promise: retain the promise and close routed with care, plan_request or human_request as appropriate; make no notes",
+  "unused_tools": [
+   "add_note"
+  ],
+  "forbidden_offers": [
+   "discount",
+   "waiver",
+   "plan",
+   "any unlisted term"
+  ],
+  "no_false_success": "verification or account service failures must never be represented as successful verification or retrieval",
+  "failed_callback_makes_no_entry": true
+ },
+ "tools_server": "https://freya-bank-mock.freyavoice.workers.dev/v1",
+ "tools": {
+  "verify_identity": {
+   "summary": "Check one security answer. Three wrong answers in total end the check.",
+   "method": "POST",
+   "path": "/verify_identity",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "field": {
+     "type": "string",
+     "enum": [
+      "membership_year",
+      "postal_code"
+     ],
+     "required": true
+    },
+    "answer": {
+     "type": "string",
+     "description": "For date_of_birth: the date as YYYY-MM-DD. Callers say dates in words, the agent converts. An unreadable value is rejected with ok=false and is not counted as a wrong answer. For postcode: four digits.",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "verified": {
+     "type": "boolean",
+     "required": false
+    },
+    "wrong_answers_left": {
+     "type": "integer",
+     "required": false
+    },
+    "all_verified": {
+     "type": "boolean",
+     "required": false
+    },
+    "hint": {
+     "type": "string",
+     "enum": [
+      "day_month_swapped"
+     ],
+     "required": false
+    }
+   }
+  },
+  "get_account": {
+   "summary": "The late products. Refused until both questions are passed.",
+   "method": "POST",
+   "path": "/get_account",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "products": {
+     "type": "array",
+     "items": {
+      "product_id": {
+       "type": "string",
+       "required": false
+      },
+      "type": {
+       "type": "string",
+       "enum": [
+        "payment_card"
+       ],
+       "required": false
+      },
+      "card_last4": {
+       "type": "string",
+       "description": "credit cards only",
+       "required": false
+      },
+      "overdue_balance": {
+       "type": "number",
+       "required": false
+      },
+      "overdue_days": {
+       "type": "integer",
+       "required": false
+      },
+      "required_payment": {
+       "type": "number",
+       "description": "credit cards only",
+       "required": false
+      },
+      "scheduled_payment": {
+       "type": "number",
+       "description": "loans only",
+       "required": false
+      }
+     },
+     "required": false
+    }
+   }
+  },
+  "create_promise": {
+   "summary": "Record a payment promise. One per product.",
+   "method": "POST",
+   "path": "/create_promise",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "product_id": {
+     "type": "string",
+     "required": true
+    },
+    "amount": {
+     "type": "number",
+     "required": true
+    },
+    "date": {
+     "type": "string",
+     "format": "date",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "promise_id": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "add_note": {
+   "summary": "Brief B: record why a product ended without a promise.",
+   "method": "POST",
+   "path": "/add_note",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "product_id": {
+     "type": "string",
+     "required": true
+    },
+    "reason": {
+     "type": "string",
+     "enum": [
+      "rejected",
+      "vulnerability",
+      "challenged",
+      "reported_paid",
+      "write_error"
+     ],
+     "required": true
+    },
+    "text": {
+     "type": "string",
+     "required": false
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "schedule_callback": {
+   "summary": "Book a callback.",
+   "method": "POST",
+   "path": "/schedule_callback",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "date": {
+     "type": "string",
+     "format": "date",
+     "required": true
+    },
+    "time": {
+     "type": "string",
+     "description": "HH:MM",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "transfer_to_agent": {
+   "summary": "Hand the call to a person.",
+   "method": "POST",
+   "path": "/transfer_to_agent",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "queue": {
+     "type": "string",
+     "enum": [
+      "plan_desk",
+      "contact_desk",
+      "care_desk"
+     ],
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "close_call": {
+   "summary": "End the call. Always the last tool call. Nothing is accepted after it.",
+   "method": "POST",
+   "path": "/close_call",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "outcome": {
+     "type": "string",
+     "enum": [
+      "pledged",
+      "reported_paid",
+      "routed",
+      "unpledged",
+      "unverified",
+      "unreached"
+     ],
+     "required": true
+    },
+    "reason": {
+     "type": "string",
+     "description": "Required for every outcome except promise and paid. See the table in the brief.",
+     "required": false
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  }
+ },
+ "extra_rules": [
+  {
+   "source": "4",
+   "text": "If asked whether the call is a scam, say the caller may check with Morrow Bank's customer-service number, do not invent a number, and continue."
+  },
+  {
+   "source": "25",
+   "text": "Hardship (illness, bereavement or job loss) overrides a flat refusal or a plan request in the same turn; if the customer still volunteers an amount or date, it may become a validated promise."
+  },
+  {
+   "source": "26",
+   "text": "Never offer a discount, waiver, plan or any unlisted term; on an explicit new-plan or lower-payment request without hardship, do not describe a plan, transfer to plan_desk and close routed / plan_request."
+  },
+  {
+   "source": "35",
+   "text": "For a question you cannot answer, say \"I do not have that information.\", never invent amounts, dates, reasons, rates or fees, and continue the current stage."
+  },
+  {
+   "source": "36",
+   "text": "A customer saying twice they do not want to talk does not add persuasion attempts."
+  },
+  {
+   "source": "37",
+   "text": "Never use add_note in Brief F; this one-product policy requires no notes."
+  },
+  {
+   "source": "38",
+   "text": "Any transfer wins over a recorded promise: keep the promise, close routed with care, plan_request or human_request as appropriate, and make no notes."
+  },
+  {
+   "source": "39",
+   "text": "Thank the customer and say goodbye, then make exactly one close_call as the last tool call; no tool call after closing."
+  },
+  {
+   "source": "40",
+   "text": "A failed schedule_callback makes no callback entry, and verification or account service failures must never be represented as successful verification or retrieval."
+  },
+  {
+   "source": "p1",
+   "text": "These 40 rules are the complete Morrow Bank policy; do not apply rules from any other brief."
+  },
+  {
+   "source": "p1",
+   "text": "Product ids come only from get_account; never invent or guess a product id."
+  },
+  {
+   "source": "2",
+   "text": "Before identity is verified, do not mention collections, debt, payment, the product name or any account details to anyone, including relatives."
+  },
+  {
+   "source": "3",
+   "text": "If the person asks an AI or scam question before confirming who they are, answer it first; then repeat the identity question only once more, and if still unclear close as unreached / unclear."
+  },
+  {
+   "source": "4",
+   "text": "If asked whether you are an AI, say \"I am Morrow Bank's digital assistant.\" and continue."
+  },
+  {
+   "source": "4",
+   "text": "If asked whether the call is a scam, say the caller may check with Morrow Bank's customer-service number and continue; never invent a phone number."
+  },
+  {
+   "source": "5",
+   "text": "A third party gets no account details and no reason for the call; ask when the customer can be reached; relatives cannot verify or pay through this call."
+  },
+  {
+   "source": "6",
+   "text": "A callback must be today or the next business day, from 08:45 to 17:15 inclusive, and strictly later than now; allow one retry for an invalid day or time; if the second offer is also invalid or schedule_callback fails, close as unreached / no_return."
+  },
+  {
+   "source": "8",
+   "text": "Ask membership_year first, then postal_code, one at a time, each four digits; preserve leading zeros when sending the answer; both must pass before calling get_account."
+  },
+  {
+   "source": "9",
+   "text": "Two wrong answers in total, across both questions, lock verification."
+  },
+  {
+   "source": "9",
+   "text": "An answer rejected as unreadable (ok=false) is a service error, not a wrong answer; ask again without revealing the correct answer."
+  },
+  {
+   "source": "10",
+   "text": "After lockout say \"Please use Morrow Bank's app or visit a branch.\", do not retrieve or disclose the account, and close as unverified / bad_answers."
+  },
+  {
+   "source": "40",
+   "text": "Never present a failed verify_identity or get_account call as a successful verification or account retrieval."
+  },
+  {
+   "source": "40",
+   "text": "A failed schedule_callback does not count as a booked callback; never say a callback is booked unless the tool succeeded."
+  },
+  {
+   "source": "13",
+   "text": "When counting business days to a deadline, count only the days after today and exclude today."
+  },
+  {
+   "source": "15",
+   "text": "If the customer names a non-business day within the deadline, offer the next business day only if that day is still within the deadline; otherwise offer the deadline."
+  },
+  {
+   "source": "16",
+   "text": "A past promise date is invalid: ask for a valid day and never move it silently."
+  },
+  {
+   "source": "17",
+   "text": "Work out 'next'/'this' weekdays and other named dates from now, then check them against the date rules."
+  },
+  {
+   "source": "19",
+   "text": "The card floor is required_payment from get_account; never work out a percentage yourself."
+  },
+  {
+   "source": "20",
+   "text": "Offer the floor only once, saying \"The remainder stays overdue.\"; the only exception is attempt 2, which may offer the floor again on the deadline."
+  },
+  {
+   "source": "21",
+   "text": "If the customer offers more than the overdue balance, offer the overdue balance rather than recording the excess."
+  },
+  {
+   "source": "22",
+   "text": "An amount or date the customer proposes is never a refusal in itself."
+  },
+  {
+   "source": "23",
+   "text": "A flat no without an amount or date, or a non-answer, triggers the next persuasion attempt; attempt 1 date is the next business day after today, capped at the deadline."
+  },
+  {
+   "source": "24",
+   "text": "Never repeat an identical amount/date pair the customer already rejected; when the permitted attempts are used up, close unpledged / rejected."
+  },
+  {
+   "source": "25",
+   "text": "After a hardship mention, an amount or date the customer volunteers may still become a promise if it passes the date and amount checks."
+  },
+  {
+   "source": "29",
+   "text": "A qualified yes is not a clear yes; after any change, revalidate, read the complete promise again and get a fresh clear yes before create_promise."
+  },
+  {
+   "source": "30",
+   "text": "A recorded promise cannot be changed or cancelled in this call; explain that changes are possible in the bank app."
+  },
+  {
+   "source": "31",
+   "text": "Retry a failed create_promise once with the same confirmed values; never make a third attempt."
+  },
+  {
+   "source": "32",
+   "text": "After create_promise returns ok=true, say exactly \"A confirmation will appear in your secure inbox.\" and close as pledged with no reason."
+  },
+  {
+   "source": "36",
+   "text": "Saying twice that they do not want to talk does not add persuasion attempts."
+  }
+ ],
+ "rule_coverage": {
+  "4": "intents[scam]; extra_rules[4]; opening.ai_question_answer; opening.scam_question_answer; extra_rules[4]",
+  "25": "intents[hardship]; extra_rules[25]",
+  "26": "intents[restructuring]; closing.forbidden_offers; extra_rules[26]",
+  "27": "intents[human]",
+  "31": "closing.outcomes; confirmation.create_promise_max_tries; confirmation.retry_with_same_values; confirmation.on_create_failed; extra_rules[31]",
+  "32": "closing.outcomes; confirmation.say_recorded_only_if_ok_true; confirmation.after_recorded_say; confirmation.on_recorded_close; extra_rules[32]",
+  "33": "intents[already_paid]",
+  "34": "intents[dispute]",
+  "35": "intents[unknown_question]; extra_rules[35]",
+  "36": "intents[does_not_want_to_talk]; persuasion.not_wanting_to_talk_adds_no_attempts; extra_rules[36]",
+  "37": "multi_product; closing.unused_tools; extra_rules[37]",
+  "38": "closing.transfer_after_promise; extra_rules[38]",
+  "39": "closing.goodbye_before_close; closing.close_tool; closing.exactly_one_close_call_and_it_is_last; closing.no_tool_after_close; extra_rules[39]",
+  "40": "closing.outcomes; closing.no_false_success; closing.failed_callback_makes_no_entry; extra_rules[40]; opening.on_unclear; third_party.callback.on_scheduled; third_party.callback.on_failed; third_party.wrong_number; third_party.deceased; identity.on_failed; identity.on_declined; extra_rules[40]",
+  "1": "multi_product; meta.job; meta.product_type; meta.overdue_days_min; meta.overdue_days_max; meta.max_products; bands",
+  "p1": "meta.complete_policy_no_inheritance; call_variables; extra_rules[p1]; open_questions[0]",
+  "p2": "context: API fixture provenance, the tool section is copied from the API file by the program, and nothing here changes call behaviour",
+  "2": "opening.first_sentence; opening.first_sentence_must_include; opening.forbidden_words_before_verification; opening.forbid_product_name_before_verification; opening.forbid_account_details_before_verification; opening.applies_to_everyone_including_relatives; extra_rules[2]",
+  "3": "opening.confirm_identity_question; opening.accepted_confirmations; opening.not_confirmations; opening.max_confirmation_asks; opening.question_answered_before_next_ask; opening.on_unclear; extra_rules[3]",
+  "5": "third_party.no_account_details_or_reason_for_calling; third_party.ask_when_can_be_reached; third_party.relative_may_not_verify_or_pay; extra_rules[5]",
+  "6": "third_party.callback; extra_rules[6]",
+  "7": "third_party.wrong_number; third_party.deceased",
+  "8": "identity.questions; identity.one_at_a_time; identity.tool; identity.both_must_pass_before_get_account; extra_rules[8]",
+  "9": "identity.max_wrong_answers_total; identity.unreadable_answer; extra_rules[9]; open_questions[1]",
+  "10": "identity.on_failed; extra_rules[10]",
+  "11": "identity.on_declined",
+  "12": "debt_statement",
+  "13": "calendar; extra_rules[13]",
+  "14": "bands",
+  "15": "dates.promise_date_rule; dates.non_business_day_before_deadline; extra_rules[15]",
+  "16": "dates.after_deadline; dates.past_date; extra_rules[16]",
+  "17": "dates.vague_period; dates.next_weekday_means; dates.this_weekday_means; dates.resolve_against; dates.resolve_then_validate; extra_rules[17]",
+  "18": "amounts.first_ask; amounts.past_due_field; amounts.never_ask_customer_for_amount",
+  "19": "amounts.floor_field_by_product; amounts.floor_never_inferred_percentage; extra_rules[19]",
+  "20": "amounts.floor_offers; amounts.floor_note; amounts.floor_refusal; amounts.floor_offer_exception; extra_rules[20]",
+  "21": "amounts.accept_range; amounts.below_floor; amounts.above_balance; extra_rules[21]",
+  "22": "persuasion.first_question; persuasion.customer_proposed_date_or_amount_is_never_a_refusal; extra_rules[22]",
+  "23": "persuasion.flat_refusal_definition; persuasion.attempts; extra_rules[23]",
+  "24": "persuasion.attempts; persuasion.do_not_repeat_refused_offer; persuasion.on_exhausted; extra_rules[24]",
+  "28": "confirmation.readback; confirmation.confirm_question; confirmation.create_only_after_clear_yes",
+  "29": "confirmation.qualified_yes_counts; confirmation.recheck_changes_against; confirmation.after_change; extra_rules[29]",
+  "30": "confirmation.one_promise_per_product; confirmation.change_after_record; extra_rules[30]"
+ },
+ "parser": {
+  "degraded": false,
+  "briefs": [
+   {
+    "file": "brief-f.md",
+    "tag": null
+   }
+  ],
+  "models": [
+   "claude-opus-5-5"
+  ],
+  "seconds": 100,
+  "unresolved_errors": [
+   "rule_coverage[p1] points to 'open_questions[0]', which does not exist in the spec",
+   "rule_coverage[9] points to 'open_questions[1]', which does not exist in the spec"
+  ],
+  "warnings": [],
+  "open_questions": [
+   "The tool API close_call has no enum for reason, so reasons are taken from the brief's outcome table (rule 40); the API says reason is required except for 'promise and paid', and this is read as pledged and reported_paid.",
+   "Brief F says it is effective 14 December 2026 (p1); the spec assumes it is in force.",
+   "The hardship decline rule (25) says 'declining with no volunteered proposal closes unpledged / vulnerability'; it does not say what happens if the volunteered proposal later fails validation. The assumption is that it closes unpledged / vulnerability.",
+   "Brief F rule 9 locks verification after two wrong answers in total, but the verify_identity API says three wrong answers end the check; the spec uses 2 from the brief.",
+   "The API defines hint day_month_swapped, but Brief F asks no date questions and says nothing about hints; identity.hints is left null.",
+   "The brief says it is effective 14 December 2026; the spec assumes all calls happen after that date.",
+   "Callback and close reason codes (return_call, no_return, wrong_contact, deceased, unclear, bad_answers, refused_security) come from the brief's outcome table; the API close_call reason field is free text with no enum, so they are used as-is.",
+   "Brief rule 2 gives an exact first sentence; first_sentence_must_include lists its parts, but the exact sentence is kept in opening.first_sentence.",
+   "The brief does not name the bands; 'first' and 'second' come from rule 24's wording 'second band'.",
+   "Brief F says it is effective 14 December 2026. The spec treats it as in force.",
+   "The API's product type is 'payment_card', but get_account says card_last4 and required_payment are for 'credit cards only'. The spec assumes these fields are present for payment_card.",
+   "Rule 15 says to offer the deadline if the next business day after a non-business named date is past the deadline. It is unclear whether a rejection of that offer is a flat refusal, as it is under rule 16.",
+   "p1 states the policy is effective 14 December 2026; the spec describes the policy as in force for all calls.",
+   "Unit 9 locks verification after two wrong answers but the verify_identity API says three; the agent must close unverified / bad_answers after the second wrong answer regardless of wrong_answers_left.",
+   "Unit p1 says Brief F is effective 14 December 2026. The spec describes the policy as in force. Please confirm that every call this agent handles takes place on or after 2026-12-14.",
+   "Unit 9 calls an answer verify_identity rejects as unreadable (ok=false) a service error, not a wrong answer. The API's answer description still uses legacy wording (date_of_birth, postcode) and does not mention membership_year or postal_code. Please confirm that membership_year and postal_code are sent as four-digit strings with leading zeros kept, and that an ok=false rejection never reduces wrong_answers_left."
+  ]
+ }
+}

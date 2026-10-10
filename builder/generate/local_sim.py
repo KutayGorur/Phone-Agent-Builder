@@ -136,6 +136,7 @@ SCEN = {
 WRONG = {
     'PUB-03': [('date_of_birth', '12 July 1991'), ('date_of_birth', '21 August 1992'), ('date_of_birth', '21 July 1990')],
     'TC-03': [('date_of_birth', '5 July 1991'), ('date_of_birth', '5 June 1991'), ('postcode', '7001'), ('postcode', '7002')],
+    'TF-03': [('membership_year', '2001'), ('membership_year', '2002')],
     'TE-05': [('date_of_birth', '12 May 1980'), ('date_of_birth', '13 May 1980'), ('date_of_birth', '14 May 1980'), ('date_of_birth', '15 May 1980'),
               ('postcode', '4200'), ('postcode', '4201'), ('postcode', '4202'), ('postcode', '4203')],
 }
@@ -159,6 +160,13 @@ VARIANTS = {
           'TE-04': [I('dispute', x_product='card'), I('offer', x_date='today'), I('agree')], 'TE-05': 'identity',
           'TE-06': [I('restructuring')], 'TE-07': [I('offer', x_date='Thursday'), I('agree')],
           'TE-08': [TP('other'), TP('gives_time', 'tomorrow', 'nine in the morning')], 'TE-09': [TP('deceased')]},
+    'f': {'TF-01': [I('agree'), I('agree')],
+          'TF-02': [TP('other'), TP('gives_time', 'tomorrow', 'eight forty-five in the morning')],
+          'TF-03': 'identity',
+          'TF-04': [I('hardship'), I('refuse')],
+          'TF-05': [I('offer', x_date='Wednesday 16 December'), I('offer', x_amount='72', x_date='Wednesday 16 December'), I('agree'), I('agree')],
+          'TF-06': [I('refuse'), I('refuse'), I('refuse')],
+          'TF-08': [I('restructuring')]},
 }
 
 
@@ -187,6 +195,7 @@ if __name__ == '__main__':
     bad += run_set('A', load('builder/specs/brief-a.spec.json'), API, [c for c in CASES if c['brief'] == 'A'], SCEN, v)
     for x, scen in VARIANTS.items():
         p = 'out/e2e/brief-%s.spec.json' % x
-        spec = load(p if os.path.exists(os.path.join(ROOT, p)) else 'out/%s.spec.json' % x)
+        cands = [p, 'builder/specs/brief-%s.spec.json' % x, 'out/brief-%s.spec.json' % x, 'out/%s.spec.json' % x]
+        spec = load(next(c for c in cands if os.path.exists(os.path.join(ROOT, c))))
         bad += run_set(x.upper(), spec, load('test-briefs/tools-%s.openapi.json' % x), load('test-briefs/cases-%s.json' % x), scen, v)
     sys.exit(1 if bad else 0)

@@ -1,0 +1,1 @@
+2026-10-10T16:10:55Z F wired: 7 scenarios (TF-01..06,08; TF-07 tool-failure skipped, needs bank fault injection), all green, total 48. Spec reviewed only against script outcomes. Next: G, then H (parse via build.py --dry-run, add VARIANTS entries).
