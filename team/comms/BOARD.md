@@ -16,7 +16,7 @@ Status values: free / claimed / in-progress / blocked / done. Times are UTC. Edi
 | 08 fresh-clone dry run on A and D, timed | tasks/08-fresh-clone-run.md | no (workflow save only) | no | 05, 06, 07 merged | | free | | | |
 | 09 Sunday run-book + submission | tasks/09-sunday-runbook.md | no | no | all | | free | | | |
 | 10 engine state/parsing fixes (ACC-01,02,03,04,06,09,10,13,19,20,22,23,24,26,27) | tasks/10-engine-state-fixes.md | no | `engine_lib.py` only | none | claude-t10 | in-progress | 2026-10-10T18:45Z | main | 2026-10-10T18:45Z |
-| 11 spec compiler fixes (ACC-05,11,14,15,21,27) | tasks/11-compiler-fixes.md | no | `ecfg.py`, `generate.py` | none | | free | | | |
+| 11 spec compiler fixes (ACC-05,11,14,15,21,27) | tasks/11-compiler-fixes.md | no | `ecfg.py`, `generate.py` | none | claude-kutay-11 | in-progress | 2026-10-10T18:45Z | main | 2026-10-10T18:45Z |
 | 12 honest build status + hard deadline (ACC-07,16) | tasks/12-build-readiness-and-deadline.md | no | no (`build.py` only) | none | | free | | | |
 | 13 parser robustness, H empty sections (ACC-08) | tasks/13-parser-robustness.md | no (LLM parse calls) | no (`builder/parse/` only) | none | | free | | | |
 
