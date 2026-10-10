@@ -52,15 +52,33 @@ def _amt_tok(t):
     return 'full'
 
 
-def _date_tok(t):
-    t = _s(t).lower()
-    if 'deadline' in t:
-        return 'deadline'
-    if 'last business day' in t or 'this week' in t:
-        return 'week'
-    if 'today' in t:
-        return 'today'
-    return 'week'
+DATE_TOKENS = ('next_business_day', 'capped_next_business_day', 'deadline', 'midpoint', 'week_end', 'today')
+
+
+def _date_tok(t, warn=None, where='persuasion attempt'):
+    """Persuasion date text -> one explicit token. Text that matches no known phrase becomes 'unknown' (and a warning),
+    never a guess: 'deadline' only for the deadline itself, 'week_end' only for the last business day of a week."""
+    raw = _s(t).strip()
+    key = re.sub(r'[\s\-]+', '_', raw.lower())
+    if key in DATE_TOKENS:
+        return key
+    low = raw.lower()
+    tok = None
+    if re.match(r'^(the )?(deadline|latest promise date)\.?$', low):
+        tok = 'deadline'
+    elif 'midpoint' in low or 'index ceiling' in low or re.search(r'ceil\w*\s*\(', low) or re.search(r'half\w*\s+(of|way|to)', low):
+        tok = 'midpoint'
+    elif 'last business day' in low and 'week' in low:
+        tok = 'week_end'
+    elif 'next business day' in low:
+        tok = 'capped_next_business_day' if ('cap' in low or 'deadline' in low) else 'next_business_day'
+    elif re.match(r'^(today|same day)\.?$', low):
+        tok = 'today'
+    if tok is None:
+        tok = 'unknown'
+        if warn is not None:
+            warn.append('%s date %r is not a known date rule: compiled as "unknown" (engine default), not guessed' % (where, raw))
+    return tok
 
 
 def _words(field):
@@ -112,7 +130,7 @@ def normalize_intents(spec):
     return out
 
 
-def build_E(spec):
+def _build(spec, warns_out):
     cal = config_from_spec(spec)
     meta = spec.get('meta') or {}
     mp = spec.get('multi_product')
@@ -133,12 +151,18 @@ def build_E(spec):
     for t in (amts.get('floor_formula_by_product') or {}):
         floor_word.setdefault(t, 'minimum payment')
 
+    warns = warns_out
     pe = []
     for i, a in enumerate(pers.get('attempts') or []):
-        pe.append({'n': a.get('n') or i + 1, 'amt': _amt_tok(a.get('amount')), 'date': _date_tok(a.get('date')),
-                   'bands': a.get('bands') or None})
+        n_ = a.get('n') or i + 1
+        dsrc = a.get('date_token') or a.get('date')
+        e = {'n': n_, 'amt': _amt_tok(a.get('amount')), 'date': _date_tok(dsrc, warns, 'persuasion attempt %s' % n_),
+             'bands': a.get('bands') or None}
+        if a.get('business_days_after_today') is not None:
+            e['bd'] = a['business_days_after_today']
+        pe.append(e)
     if not pe:
-        pe = [{'n': 1, 'amt': 'full_or_floor', 'date': 'week', 'bands': None}]
+        pe = [{'n': 1, 'amt': 'full_or_floor', 'date': 'week_end', 'bands': None}]
 
     outs = closing.get('outcomes') or []
     names = [o.get('outcome') for o in outs]
@@ -149,23 +173,64 @@ def build_E(spec):
                 return o
         return None
     wh = lambda o: _s(o.get('when')).lower()
-    promise_o = find(lambda o: not o.get('reasons') and 'promise' in wh(o) and 'no promise' not in wh(o)) or find(lambda o: not o.get('reasons'))
     ap = intents.get('sp_already_paid') or {}
     paid_reason = ap.get('note_reason') or 'paid'
+    empties = [o for o in outs if not o.get('reasons')]
+
+    # paid: the already_paid intent's own close, else the reason-less outcome named like the paid note reason
     paid_o = (ap.get('close') or {}).get('outcome') if ap.get('close') else None
     if not paid_o:
-        po = find(lambda o: not o.get('reasons') and o is not promise_o and 'paid' in wh(o))
+        po = find(lambda o: not o.get('reasons') and _s(o.get('outcome')).lower() == _s(paid_reason).lower())
         paid_o = po.get('outcome') if po else None
+    # promise: the other reason-less outcome; `when` text only breaks a tie, with a warning
+    cands = [o for o in empties if o.get('outcome') != paid_o]
+    if len(cands) == 1:
+        promise_o = cands[0]
+    elif cands:
+        promise_o = find(lambda o: o in cands and 'promise' in wh(o) and 'no promise' not in wh(o))
+        if promise_o is None:
+            promise_o = cands[0]
+        warns.append('several outcomes without reasons (%s) could be the promise outcome: chose %r from the text of "when"' %
+                     (', '.join(_s(o.get('outcome')) for o in cands), promise_o.get('outcome')))
+    else:
+        promise_o = None
+        if names:
+            warns.append('no outcome without reasons: promise outcome taken from the first outcome %r' % names[0])
+    # no promise: the exhaustion close, else the outcome that lists its reason
     exh = _oc(pers.get('on_exhausted')) if pers.get('on_exhausted') else {'outcome': None, 'reason': None}
-    nop = find(lambda o: exh['reason'] and exh['reason'] in (o.get('reasons') or [])) or find(lambda o: 'no promise' in wh(o))
+    nop = find(lambda o: exh['reason'] and exh['reason'] in (o.get('reasons') or []))
+    if nop is None and exh['outcome']:
+        nop = find(lambda o: o.get('outcome') == exh['outcome'])
+    if nop is None:
+        nop = find(lambda o: 'no promise' in wh(o))
+        if nop is not None:
+            warns.append('no-promise outcome %r taken from the text of "when"' % nop.get('outcome'))
     if not exh['outcome'] and nop:
         exh['outcome'] = nop.get('outcome')
     if not exh['reason'] and nop and nop.get('reasons'):
         exh['reason'] = nop['reasons'][0]
+    # transfer: the transfer intents' close, else the outcome that lists their reasons
     tr = [i for i in intents.values() if i.get('kind') == 'transfer']
-    tro = find(lambda o: 'transfer' in wh(o))
+    tr_out = tr[0]['close'].get('outcome') if tr else None
+    if not tr_out:
+        trr = set(i['on_accept']['close'].get('reason') for i in intents.values() if i.get('kind') == 'offer')
+        trr |= set(i['close'].get('reason') for i in tr)
+        trr.discard(None)
+        tro = find(lambda o: trr and trr & set(o.get('reasons') or []))
+        if tro is None:
+            tro = find(lambda o: 'transfer' in wh(o))
+            if tro is not None:
+                warns.append('transfer outcome %r taken from the text of "when"' % tro.get('outcome'))
+        tr_out = tro.get('outcome') if tro else None
     out = {'r_promise': promise_o.get('outcome') if promise_o else (names[0] if names else None), 'r_paid': paid_o,
-           'r_nopromise': exh['outcome'], 'r_transfer': (tr[0]['close']['outcome'] if tr else (tro.get('outcome') if tro else None))}
+           'r_nopromise': exh['outcome'], 'r_transfer': tr_out}
+    seen = {}
+    for role, oc in out.items():
+        if oc is not None:
+            seen.setdefault(oc, []).append(role)
+    for oc, roles in seen.items():
+        if len(roles) > 1:
+            warns.append('outcome %r is mapped to two roles (%s): check closing.outcomes against the brief' % (oc, ', '.join(roles)))
 
     cf = conf.get('on_create_failed') or {}
     cfr = cf.get('reason') or _oc(cf)['reason']
@@ -210,7 +275,8 @@ def build_E(spec):
         'after_recorded': conf.get('after_recorded_say') or '', 'goodbye': goodbye, 'debt_say': say,
         'pers': pe, 'exhausted': exh, 'use_notes': bool(mp and mp.get('note_tool')),
         'note_reasons': (mp or {}).get('note_reasons') or [],
-        'max_tries': conf.get('create_promise_max_tries') or 2, 'create_failed': create_failed,
+        'max_tries': 2 if conf.get('create_promise_max_tries') is None else conf['create_promise_max_tries'],
+        'ack_scope': _ack_scope(conf, warns), 'create_failed': create_failed,
         'intents': intents, 'out': out, 'paid_reason': paid_reason, 'n_q': len(questions),
         'idv': {'max_refusals': on_dec.get('max_refusals') or 2,
                 'declined': _oc(on_dec),
@@ -229,7 +295,74 @@ def build_E(spec):
         'scam_say': (intents.get('sp_scam') or {}).get('say') or 'they can verify this call with the bank\'s customer service',
         'unknown_say': (intents.get('sp_unknown_question') or {}).get('say') or 'I do not have that information',
     }
+    warns.extend(E['cal'].get('warnings') or [])
     return E
+
+
+ACK_SCOPES = ('per_call', 'per_record')
+
+
+def _ack_scope(conf, warns):
+    """Where the 'recorded' acknowledgement (confirmation.after_recorded_say) is spoken: once per call, or after each record."""
+    v = conf.get('acknowledgement_scope')
+    if v is None and conf.get('after_recorded_say_after_each_record'):
+        v = 'per_record'
+    if v is None:
+        return 'per_call'
+    v = _s(v).strip().lower().replace('-', '_').replace(' ', '_')
+    if v not in ACK_SCOPES:
+        warns.append('confirmation.acknowledgement_scope %r is not one of %s: using per_call' % (v, '|'.join(ACK_SCOPES)))
+        return 'per_call'
+    return v
+
+
+def build_E_warn(spec):
+    """-> (E, warnings). Warnings are compile-time findings a human should read (guessed roles, ignored spec fields)."""
+    warns = []
+    E = _build(spec, warns)
+    warns.extend(ignored_fields(spec))
+    return E, warns
+
+
+def build_E(spec):
+    return build_E_warn(spec)[0]
+
+
+# Spec fields each section's compiler reads. A field outside this list that carries a value is reported by
+# ignored_fields(): the brief asked for something the generator does not implement.
+_PARSER_META = {'source', 'brief_wording', 'description', 'note', 'notes'}
+CONSUMED = {
+    'meta': {'bank_name', 'language', 'multi_product'},
+    'opening': {'first_sentence', 'first_sentence_must_include', 'forbidden_words_before_verification', 'confirm_identity_question',
+               'accepted_confirmations', 'not_confirmations', 'on_unclear', 'ai_question_answer'},
+    'third_party': {'callback', 'wrong_number', 'deceased', 'say_nothing_beyond_opening', 'relative_may_not_verify_or_pay'},
+    'identity': {'questions', 'tool', 'on_declined', 'on_failed', 'hints'},
+    'debt_statement': {'say', 'product_names', 'include'},
+    'amounts': {'past_due_field', 'floor_field_by_product', 'floor_formula_by_product'},
+    'persuasion': {'first_question', 'attempts', 'on_exhausted'},
+    'confirmation': {'confirm_question', 'after_recorded_say', 'create_promise_max_tries', 'on_create_failed',
+                     'acknowledgement_scope', 'after_recorded_say_after_each_record'},
+    'multi_product': {'note_tool', 'note_reasons', 'create_promise_failure'},
+    'closing': {'outcomes'},
+    'calendar': {'business_days', 'holidays', 'week_start'},
+}
+_TOP_CONSUMED = set(CONSUMED) | {'call_variables', 'bands', 'intents', 'extra_rules', 'tools', 'tools_server', 'dates', 'parser',
+                                 'rule_coverage'}
+
+
+def ignored_fields(spec):
+    out = []
+    for k, v in spec.items():
+        if k not in _TOP_CONSUMED and v not in (None, False, '', [], {}):
+            out.append('spec section %r is not read by the compiler' % k)
+    for sec, keep in CONSUMED.items():
+        d = spec.get(sec)
+        if not isinstance(d, dict):
+            continue
+        for k, v in d.items():
+            if k not in keep and k not in _PARSER_META and v not in (None, False, '', [], {}):
+                out.append('spec field %s.%s is not read by the compiler (fixed engine behaviour or unsupported)' % (sec, k))
+    return out
 
 
 def first_sentence(spec):

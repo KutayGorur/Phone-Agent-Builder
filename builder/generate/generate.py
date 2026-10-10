@@ -12,9 +12,23 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))
 
 from builder.logic import snippet_lib as SL  # noqa: E402
-from builder.generate.ecfg import build_E, first_sentence  # noqa: E402
+from builder.generate.ecfg import build_E_warn, first_sentence  # noqa: E402
 
-BASE = 'https://freya-bank-mock.freyavoice.workers.dev/v1/'
+DEFAULT_BASE = 'https://freya-bank-mock.freyavoice.workers.dev/v1/'
+BASE = DEFAULT_BASE          # set per spec by generate(): spec['tools_server'] when present
+LAST_WARNINGS = []           # compile warnings of the last generate() call
+
+
+def tools_base(spec, warns=None):
+    srv = spec.get('tools_server')
+    if not srv:
+        return DEFAULT_BASE
+    srv = str(srv).strip()
+    if not re.match(r'^https?://[^\s]+$', srv):
+        if warns is not None:
+            warns.append('tools_server %r is not an http(s) URL: using the default tools server' % srv)
+        return DEFAULT_BASE
+    return srv.rstrip('/') + '/'
 
 
 def _braces(s):
@@ -188,7 +202,10 @@ AMOUNT_PRE = ("\ntry:\n    b = config.get('body')\n    if isinstance(b, dict) an
 # ------------------------------------------------------------------ the workflow
 
 def generate(spec):
-    E = build_E(spec)
+    global BASE
+    E, warns = build_E_warn(spec)
+    BASE = tools_base(spec, warns)
+    LAST_WARNINGS[:] = warns
     meta = spec.get('meta') or {}
     bank = meta.get('bank_name') or 'the bank'
     op = spec.get('opening') or {}
@@ -390,10 +407,28 @@ def generate(spec):
                                     'engine', mapping=[{'path': 'data.ok', 'variable': 'nt_ok'}])
     nodes['do_transfer'] = api_node('do_transfer', 'transfer_to_agent', {'queue': ('string', '{{tr_queue}}')}, 'engine',
                                     mapping=[{'path': 'data.ok', 'variable': 'tr_ok'}], on_enter={'type': 'tts', 'text': '{{tr_text}}'})
+    # Fail-safe for a transfer the bank did not accept (tr_ok is not 'true': ok=false, or no answer at all). The engine does
+    # not look at the result, so without this branch the call would close as transferred. Instead: if a promise is recorded
+    # close with the promise outcome, otherwise with the spec's own service-error close (create_failed), and say the
+    # transfer did not work. No outcome code is invented; with neither outcome in the spec the old behaviour stays.
+    tf_out = E['out'].get('r_promise')
+    tf_err = E['create_failed']
+    if tf_err.get('outcome') or tf_out:
+        code = 'ok_promise = vars.get("cp_ok") == "true"\n'
+        if tf_out:
+            code += 'if ok_promise:\n    vars["close_outcome"] = %s\n    vars.pop("close_reason", None)\n' % lit(tf_out)
+        if tf_err.get('outcome'):
+            ind = '    ' if tf_out else ''
+            code += ('else:\n' if tf_out else '') + ind + 'vars["close_outcome"] = %s\n' % lit(tf_err['outcome'])
+            if tf_err.get('reason'):
+                code += ind + 'vars["close_reason"] = %s\n' % lit(tf_err['reason'])
+        code += 'vars["bye_text"] = %s\n' % lit('I am sorry, I could not connect you. ' + E['goodbye'])
+        nodes['transfer_failed'] = code_node('transfer_failed', code, [tr('do_close')])
+        nodes['do_transfer']['transitions'] = [tr('transfer_failed', 'tr_ok', 'not_equals', 'true'), tr('engine')]
     nodes['do_callback'] = api_node('do_callback', 'schedule_callback', {'date': ('string', '{{cb_date}}'), 'time': ('string', '{{cb_time}}')}, 'engine',
                                     mapping=[{'path': 'data.ok', 'variable': 'cb_ok'}])
     nodes['do_close'] = api_node('do_close', 'close_call', {'outcome': ('string', '{{close_outcome}}'), 'reason': ('string', '{{close_reason}}')}, 'hangup',
-                                 pre=None, on_enter={'type': 'tts', 'text': '{{bye_text}}'})
+                                 pre=None, retries=1, on_enter={'type': 'tts', 'text': '{{bye_text}}'})
     nodes['hangup'] = end_node('hangup', 'call_closed')
 
     test_vars = {'customer_id': 'c_test', 'first_name': 'Test', 'last_name': 'Customer', 'title': 'Mr', 'now': '2026-10-14T11:00'}
@@ -408,3 +443,5 @@ if __name__ == '__main__':
         os.makedirs(os.path.dirname(out) or '.', exist_ok=True)
         json.dump(wf, open(out, 'w', encoding='utf-8'), indent=1)
     print('nodes:', len(wf['nodes']), 'bytes:', len(json.dumps(wf)))
+    for w in LAST_WARNINGS:
+        print('warning:', w, file=sys.stderr)

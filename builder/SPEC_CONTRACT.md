@@ -116,7 +116,7 @@ Rules for the spec:
   "persuasion": {
     "first_question": "Can you make this payment today?",
     "attempts": [                      // in order; band limits how many are used
-      {"n": 1, "amount": "full_or_floor_if_full_refused", "date": "last_business_day_this_week_else_next_week"},
+      {"n": 1, "amount": "full_or_floor_if_full_refused", "date": "week_end"},
       {"n": 2, "amount": "floor", "date": "deadline"}
     ],
     "on_exhausted": {"outcome": "no_promise", "reason": "refused"}
@@ -127,7 +127,8 @@ Rules for the spec:
     "confirm_question": "Do you confirm?",
     "one_promise_per_product": true,
     "change_after_record": "say they can change it in the mobile app",
-    "create_promise_max_tries": 2,
+    "create_promise_max_tries": 2,        // 0 is honoured (no tries); absent = 2
+    "acknowledgement_scope": "per_call",  // per_call | per_record: say after_recorded_say once in the closing, or after each recorded promise
     "on_create_failed": {"outcome": "no_promise", "reason": "service_error"},
     "after_recorded_say": "You will receive a text message confirming this promise."
   },
@@ -197,3 +198,26 @@ Rules for the spec:
 
 Final briefs change numbers, identity questions, the outcome table and the calendar, and may add or drop sections.
 The parser must cope with fields missing (null) and with extra rules (into `extra_rules`); the generator must cope with any band count, any number of identity questions, and any outcome table.
+
+## Compiler rules (Task 11)
+
+Persuasion `date` is one explicit token, or prose that the compiler maps to one (a separate `date_token` field wins when present):
+`today`, `next_business_day`, `capped_next_business_day` (next business day after today, never past the deadline), `deadline`,
+`midpoint` (business day at ceiling(deadline business days / 2) after today; `business_days_after_today` is carried as `bd`),
+`week_end` (last business day of this week, next week if that is today or past). Prose that matches none becomes `unknown`
+and a compile warning; it is never guessed as deadline or week.
+
+Outcome roles come from structure, not from the text of `closing.outcomes[].when`: paid = the `already_paid` intent's close
+(or the reason-less outcome named like its note reason); promise = the other reason-less outcome; no promise =
+`persuasion.on_exhausted`; transfer = the transfer intents' close outcome. `when` text is used only to break a tie and then warns.
+Two roles mapped to one outcome warn. Warnings: `build_E_warn(spec)` returns them, `generate.LAST_WARNINGS` and the CLI show them;
+spec fields the compiler does not read are listed too (`ecfg.ignored_fields`).
+
+`tools_server` (http/https URL) is the base of every tool URL; absent or invalid = the default mock bank, with a warning.
+
+Fail-safes (no outcome code is ever invented):
+- `transfer_to_agent` not accepted (`tr_ok` is not `true`): the call does not close as transferred. It closes with the promise
+  outcome if the last `create_promise` succeeded, else with the spec's service-error close (`confirmation.on_create_failed`), and says the
+  transfer did not work.
+- `close_call` is retried once by the platform on a failed request; the call hangs up afterwards either way (a second close would break "exactly one close").
+
