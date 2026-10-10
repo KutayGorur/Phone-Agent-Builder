@@ -323,5 +323,25 @@ class R10Compiler(unittest.TestCase):
         self.assertTrue(blocking_warnings(w))
 
 
+class R9NoteRetries(unittest.TestCase):
+    def test_r9_note_is_tried_three_times_then_the_close_goes_on(self):
+        p = Probe(products=(PERSONAL,))
+        p.say('sp_already_paid')
+        n = 0
+        while p.v['route'] == 'note':
+            n += 1
+            p.v['nt_ok'] = 'false'
+            p.run()
+        self.assertEqual(n, 3)
+        self.assertEqual((p.v['route'], p.v['close_outcome']), ('fin', 'paid'))
+
+    def test_r9_a_late_success_is_enough(self):
+        p = Probe(products=(PERSONAL,))
+        p.say('sp_already_paid')
+        p.v['nt_ok'] = 'false'; p.run()
+        p.v['nt_ok'] = 'true'; p.run()
+        self.assertEqual(p.v['route'], 'fin')
+
+
 if __name__ == '__main__':
     unittest.main()

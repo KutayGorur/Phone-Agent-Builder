@@ -629,7 +629,7 @@ def set_note(st):
 
 def noted(st):
     ok = S('nt_ok').lower() == 'true'
-    if not ok and st['tries'] < 1:
+    if not ok and st['tries'] < 2:                 # three attempts in all before the note is given up
         st['tries'] += 1
         return set_note(st)
     st['nq'].pop(0)
