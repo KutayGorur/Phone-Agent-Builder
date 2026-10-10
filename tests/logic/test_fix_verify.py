@@ -209,5 +209,29 @@ class R7Interruptions(unittest.TestCase):
         self.assertEqual(p.v['route'], 'note')
 
 
+class R8DurablePromiseFlag(unittest.TestCase):
+    def test_r8_flag_is_set_by_the_engine_and_survives_a_later_failure(self):
+        p = probe_with('ab', [PERSONAL, CAR])
+        p.say('agree')
+        p.say('agree')
+        p.create(ok=True)
+        self.assertEqual(p.v['promise_recorded'], 'true')
+        p.create(ok=False)
+        self.assertEqual(p.v['cp_ok'], 'pending')                        # the next write overwrote the result
+
+    def test_r8_fallbacks_use_the_flag(self):
+        from builder.generate.generate import generate
+        wf = generate(spec('ab'))
+        code = wf['nodes']['transfer_failed']['pre_actions'][0]['function']['parameters']['properties']['code']['default']
+        for state, want in (({'cp_ok': 'false', 'promise_recorded': 'true'}, 'promise'), ({'cp_ok': 'false'}, 'no_promise'), ({'cp_ok': 'true'}, 'promise')):
+            v = dict(state)
+            exec(code, {'vars': v})
+            self.assertEqual(v['close_outcome'], want, state)
+        eng = wf['nodes']['engine']['transitions']
+        guard = [t for t in eng if t['target_node'] == 'eng_fail_promise'][0]
+        vs = [c['conditions'][-1]['variable'] for c in guard['condition']['conditions']]
+        self.assertEqual(sorted(vs), ['cp_ok', 'promise_recorded'])
+
+
 if __name__ == '__main__':
     unittest.main()

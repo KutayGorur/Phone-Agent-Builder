@@ -270,7 +270,7 @@ def generate(spec):
 
     # ---- init / to_tp
     ivars = ['say_text', 'x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time', 'idv_note',
-             'instruction', 'route', 'bye_text', 'close_outcome', 'cp_ok', 'nt_ok', 'cb_ok', 'tr_ok', 'tr_queue', 'tr_text', 'st']
+             'instruction', 'route', 'bye_text', 'close_outcome', 'promise_recorded', 'cp_ok', 'nt_ok', 'cb_ok', 'tr_ok', 'tr_queue', 'tr_text', 'st']
     ivars += ['idq%d_state' % (i + 1) for i in range(n)]
     enum_init = 'vars["x_intent"] = "none"\nvars["x_stance"] = "other"\nvars["tp_event"] = "other"\nvars["x_q"] = "no"\n'
     nodes['init'] = code_node('init', enum_init + ''.join('vars[%s] = \'\'\n' % lit(v) for v in ivars), [tr('idq_1' if n else 'get_account')])
@@ -343,17 +343,19 @@ def generate(spec):
     # a pre_actions node in `<node>_failure_count` and overwrites `<node>_response.status` on every run, so a failed run
     # is visible without code. Both must hold, so an unset counter or a stale 'success' leaves the old behaviour.
     # Nothing on this path runs code: after one sandbox failure later code nodes can fail too (PLATFORM_NOTES.md).
-    def engine_failed(times, extra=None):
+    def engine_failed(times, alts=None):
         cs = [{'variable': 'engine_failure_count', 'operator': 'greater_than', 'operand': times - 1},
               {'variable': 'engine_response.status', 'operator': 'not_equals', 'operand': 'success'}]
-        return {'logic': 'or', 'conditions': [{'logic': 'and', 'conditions': cs + (extra or [])}]}
+        return {'logic': 'or', 'conditions': [{'logic': 'and', 'conditions': cs + a} for a in (alts or [[]])]}
     fail_bye = 'I am sorry, I have a technical problem and cannot continue this call. ' + E['goodbye']
     guard = []
     tech = E['create_failed']
     if E['out'].get('r_promise'):
-        # the last create_promise succeeded, so the bank holds a promise: close with the promise outcome
+        # a create_promise succeeded (the one just answered, or an earlier one the engine flagged), so the bank holds a
+        # promise: close with the promise outcome
         guard.append({'target_node': 'eng_fail_promise', 'description': 'engine failed twice, a promise is recorded',
-                      'condition': engine_failed(2, [{'variable': 'cp_ok', 'operator': 'equals', 'operand': 'true'}])})
+                      'condition': engine_failed(2, [[{'variable': 'cp_ok', 'operator': 'equals', 'operand': 'true'}],
+                                                     [{'variable': 'promise_recorded', 'operator': 'equals', 'operand': 'true'}]])})
         nodes['eng_fail_promise'] = api_node('eng_fail_promise', 'close_call', {'outcome': ('string', E['out']['r_promise'])}, 'hangup',
                                              on_enter={'type': 'tts', 'text': fail_bye})
     if tech.get('outcome'):
@@ -414,7 +416,7 @@ def generate(spec):
     tf_out = E['out'].get('r_promise')
     tf_err = E['create_failed']
     if tf_err.get('outcome') or tf_out:
-        code = 'ok_promise = vars.get("cp_ok") == "true"\n'
+        code = 'ok_promise = vars.get("cp_ok") == "true" or vars.get("promise_recorded") == "true"\n'
         if tf_out:
             code += 'if ok_promise:\n    vars["close_outcome"] = %s\n    vars.pop("close_reason", None)\n' % lit(tf_out)
         if tf_err.get('outcome'):

@@ -1266,6 +1266,7 @@ def created(st):
     p = st['prods'][st['cq'][0]]
     if ok:
         p['status'] = 'recorded'
+        vars['promise_recorded'] = 'true'          # durable: the next write overwrites cp_ok
         st['cq'].pop(0)
         st['tries'] = 0
     else:
