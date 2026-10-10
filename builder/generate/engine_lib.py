@@ -246,10 +246,16 @@ def _dom(dd, today):
 def free_amount(text):
     try:
         t = str(text).lower()
+        d = digitize(t)
+        m = re.search(r'(\d[\d,]*) ?,? ?(?:point|decimal|dot) ((?:\d ?)+)', d)
+        if m:
+            return float(m.group(1).replace(',', '') + '.' + m.group(2).replace(' ', ''))
+        m = re.search(r'(\d[\d,]*)(?: [a-z]+)?(?: and)? (\d{1,2}) (?:pence|penny|pennies|p|cents?|c)\b', d)
+        if m:
+            return float(m.group(1).replace(',', '')) + int(m.group(2)) / 100.0
         m = re.search(r'\d[\d,]*(?:\.\d+)?', t)
         if m:
             return float(m.group(0).replace(',', ''))
-        d = digitize(t)
         m = re.search(r'\d+(?:\.\d+)?', d)
         if m:
             return float(m.group(0))
