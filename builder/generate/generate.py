@@ -239,7 +239,7 @@ def generate(spec):
             vs += 'vars[%s] = %s\n' % (lit('close_reason'), lit(c['reason']))
         vs += 'vars[%s] = %s\n' % (lit('bye_text'), lit(text))
         nodes[key] = code_node(key, vs, [tr('do_close')])
-    fin('fin_unclear', E['unclear'], 'I am sorry, I could not confirm who I am speaking with. Goodbye.')
+    fin('fin_unclear', E['unclear'], E['unclear_say'])
     fin('fin_wrong_number', E['tp']['wrong_number'], E['tp']['wrong_number_say'])
     fin('fin_deceased', E['tp']['deceased'], E['tp']['deceased_say'])
     fin('fin_idv_failed', E['idv']['failed'], 'I am sorry, I could not verify your identity. Please ' + E['idv']['failed_say'] + '. ' + E['goodbye'])
