@@ -85,13 +85,95 @@ def number_in_text(n, text):
     return False
 
 
-def validate(spec, units, tools):
-    spec = dict(spec, tools=tools)   # coverage may point into the tool block, which the program adds itself
-    errors, warnings = [], []
-    unit_ids = [u["id"] for u in units]
-    brief_text = "\n".join(u["text"] for u in units)
-    body = {k: v for k, v in spec.items() if k not in ("rule_coverage", "extra_rules", "tools", "tools_server", "parser")}
+def _is_str_list(v):
+    return isinstance(v, list) and all(isinstance(x, str) for x in v)
 
+
+def _is_dict_list(v):
+    return isinstance(v, list) and all(isinstance(x, dict) for x in v)
+
+
+def shape_errors(spec):
+    """Path-specific errors for malformed nested shapes. Every later check can then rely on these types."""
+    errs = []
+
+    def need(path, ok, what, val):
+        if not ok:
+            errs.append(f"{path} must be {what}, got {str(val)[:80]!r}")
+        return ok
+
+    def sec(key, kind=dict):
+        v = spec.get(key)
+        if v is None:
+            return None
+        return v if need(key, isinstance(v, kind), "an object" if kind is dict else "a list", v) else None
+
+    closing = sec("closing")
+    if closing is not None:
+        outs = closing.get("outcomes")
+        if outs is not None and need("closing.outcomes", _is_dict_list(outs), "a list of objects", outs):
+            for i, o in enumerate(outs):
+                if o.get("outcome") is not None:
+                    need(f"closing.outcomes[{i}].outcome", isinstance(o["outcome"], str), "a string", o["outcome"])
+                if o.get("reasons") is not None:
+                    need(f"closing.outcomes[{i}].reasons", _is_str_list(o["reasons"]), "a list of strings", o["reasons"])
+        if closing.get("reason_required_except") is not None:
+            need("closing.reason_required_except", _is_str_list(closing["reason_required_except"]), "a list of strings", closing["reason_required_except"])
+    ident = sec("identity")
+    if ident is not None and ident.get("questions") is not None:
+        qs = ident["questions"]
+        if need("identity.questions", _is_dict_list(qs), "a list of objects", qs):
+            for i, q in enumerate(qs):
+                if q.get("field") is not None:
+                    need(f"identity.questions[{i}].field", isinstance(q["field"], str), "a string", q["field"])
+    cal = sec("calendar")
+    if cal is not None:
+        for key in ("holidays", "business_days"):
+            if cal.get(key) is not None:
+                need(f"calendar.{key}", _is_str_list(cal[key]), "a list of strings", cal[key])
+    bands = spec.get("bands")
+    if bands is not None and need("bands", _is_dict_list(bands), "a list of objects", bands):
+        for i, b in enumerate(bands):
+            if b.get("deadline") is not None:
+                need(f"bands[{i}].deadline", isinstance(b["deadline"], dict), "an object", b["deadline"])
+    intents = spec.get("intents")
+    if intents is not None:
+        need("intents", _is_dict_list(intents), "a list of objects", intents)
+    for key in ("debt_statement", "amounts"):
+        sec(key)
+    ds = spec.get("debt_statement")
+    if isinstance(ds, dict) and ds.get("product_names") is not None:
+        need("debt_statement.product_names", isinstance(ds["product_names"], dict), "an object", ds["product_names"])
+    am = spec.get("amounts")
+    if isinstance(am, dict) and am.get("floor_field_by_product") is not None:
+        need("amounts.floor_field_by_product", isinstance(am["floor_field_by_product"], dict), "an object", am["floor_field_by_product"])
+    return errs
+
+
+def validate(spec, units, tools):
+    """Run every check independently: a crash in one check becomes one error, never a lost spec."""
+    errors, warnings = [], []
+    if not isinstance(spec, dict):
+        return [f"spec must be an object, got {type(spec).__name__}"], []
+    shape = shape_errors(spec)
+    errors.extend(shape)
+    for name, fn in (("coverage", _check_coverage), ("tool enums", _check_enums), ("calendar and bands", _check_calendar_bands),
+                     ("grounding", _check_grounding)):
+        try:
+            fn(spec, units, tools, errors, warnings, bool(shape))
+        except Exception as e:  # noqa: BLE001 - malformed nested model output must be repairable, not fatal
+            if not shape:   # with shape errors listed the repair loop already knows what to fix
+                errors.append(f"internal check '{name}' could not run on this spec ({type(e).__name__}: {str(e)[:120]}); fix the malformed shapes first")
+    return errors, warnings
+
+
+def _body(spec):
+    return {k: v for k, v in spec.items() if k not in ("rule_coverage", "extra_rules", "tools", "tools_server", "parser")}
+
+
+def _check_coverage(spec, units, tools, errors, warnings, shaky):
+    spec = dict(spec, tools=tools)   # coverage may point into the tool block, which the program adds itself
+    unit_ids = [u["id"] for u in units]
     # 1. shape
     for k in TOP_KEYS:
         if k not in spec:
@@ -125,6 +207,10 @@ def validate(spec, units, tools):
         elif str(r.get("source")) not in unit_ids:
             warnings.append(f"extra_rules[{i}] cites source '{r.get('source')}', not a brief unit id")
 
+
+
+def _check_enums(spec, units, tools, errors, warnings, shaky):
+    body = _body(spec)
     # 4. consistency with the tool API enums
     close_outcomes = _enum(tools, "close_call", "outcome")
     queues = _enum(tools, "transfer_to_agent", "queue")
@@ -183,6 +269,9 @@ def validate(spec, units, tools):
         if isinstance(val, str) and items and val not in items:
             errors.append(f"amounts.floor_field_by_product['{name}'] = '{val}' is not a get_account product field {sorted(items)}")
 
+
+
+def _check_calendar_bands(spec, units, tools, errors, warnings, shaky):
     # 5. calendar and bands
     cal = spec.get("calendar") or {}
     for h in cal.get("holidays") or []:
@@ -212,6 +301,13 @@ def validate(spec, units, tools):
         elif b_lo > a_hi + 1:
             warnings.append(f"bands '{an}' and '{bn}' leave days {a_hi + 1}..{b_lo - 1} without a band")
 
+
+
+def _check_grounding(spec, units, tools, errors, warnings, shaky):
+    body = _body(spec)
+    brief_text = "\n".join(u["text"] for u in units)
+    cal = spec.get("calendar") or {}
+    bands = spec.get("bands") or []
     # 6. grounding: concrete dates, times and band numbers must be findable in the brief text
     for p, k, v in _walk(body):
         if isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) and v not in brief_text:
