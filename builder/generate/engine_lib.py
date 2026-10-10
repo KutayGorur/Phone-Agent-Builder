@@ -485,6 +485,10 @@ def cur_question(st):
 def reask(st, lead='', kind='question'):
     """The customer said something that needs no policy change: answer it and ask the pending question again."""
     q = cur_question(st)
+    if not st.get('hard_pending') and st['phase'] != 'confirm' and not st['all']:
+        pe = st['prods'][st['cur']].get('pend')
+        if pe and pe.get('k') == 'attempt' and pe.get('d'):
+            q = 'Can you do that on %s?' % dstr(from_iso(pe['d']))   # an offer already made is answered, not repeated
     ans = ('The customer asked something or said something unclear. First reply to it in one short sentence: '
            'use only these facts: ' + facts(st) + '. If the facts do not answer it, say exactly "' +
            E['unknown_say'] + '". Never invent figures, dates or reasons, and never offer a discount, waiver or '
@@ -891,6 +895,9 @@ def turn_inner(st):
             accept(p, pe['a'], from_iso(pe['d']))
             return advance(st)
         return reask(st)
+    pe0 = p.get('pend')
+    if it in ('refuse', 'evasive', 'too_much') and p['tm'] and pe0 and pe0.get('k') == 'attempt' and pe0['a'] <= p['fl'] + 0.004 and p['fl'] < p['pd'] and it != 'refuse':
+        return reask(st)              # the floor is already on the table: "can't do the full amount" is not a new refusal
     if it in ('refuse', 'evasive'):
         return refusal(st, p)
     if it == 'too_much':

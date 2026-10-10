@@ -43,3 +43,9 @@ Built: `ecfg.py`, `generate.py`, `local_sim.py` (scripted extractions + in-proce
   4. `x_q` (question asked together with an answer) added after PUB-04 failed on "Am I talking to a robot? I accept ..."; not yet re-tested on the platform in a calm period.
 - Not tested on the platform: styles (`--style pieces|corrects|talkative|asks_back|in_words`), variants C/D/E, 3-rep Brief B, `hangup` farewell order (seems fine: bye line is spoken by `do_close` before `close_call`).
 - Local: `python builder/generate/local_sim.py` (41 scripted scenarios over A, B, C, D, E with the stand-in bank and the real scorer) must stay green.
+
+## Status (10 Oct, ~15:00 UTC, closing)
+- Written, local-green (41 scenarios), deployed (gen-a v9, gen-ab v3), NOT verified on Freya: PUB-06 fix (reask with short "Can you do that on <date>?" when an offer is pending; "too much"/evasive with the floor already offered re-asks instead of a new persuasion attempt) and the PUB-04 `x_q` fix.
+- PUB-10: "recorded" in the mandated opening vs the judge check is judge noise; no wording fix planned.
+- Freya sandbox (snekbox, "Name or service not known") was down at the last two runs; 4 calls spent, no usable result. When code nodes fail the stale route `say` makes the agent repeat the last line: consider a guard.
+- TODO: smoke check, then `ci/sim.py --only PUB-04,PUB-06,PUB-10`, A x3 reps, B x3 reps, `--style` runs; optional spec gaps A42, A47, A35, A26, transfer-after-promise, B9/B10 (see coordinator note).
