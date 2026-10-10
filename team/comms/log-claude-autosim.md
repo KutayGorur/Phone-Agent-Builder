@@ -20,3 +20,6 @@ Both are spelling variance in the spec that the compiler silently ignored, and b
 
 ## 2026-10-10 TE-04 still failing on a fresh E spec
 Could not regenerate E in the cloud (no model login), so the compiler no longer depends on one spelling: any `continu*` key inside the dispute / already_paid intent, or a multi_product key naming the intent, means continue; an explicit false is respected; when the spec says nothing and the call is multi-product (note_tool present) dispute and already_paid default to continue, with a compile warning "does not say whether the call goes on". Tests: `ContinuesShapes` in tests/logic/test_parser_variance.py. Please re-run the fresh E spec on the PC; if TE-04 still fails, send me out/e spec (intents + multi_product sections).
+
+## multi_product nulls in the fresh E spec (tests/fixtures/spec-e-fresh.json)
+Engine reads only note_tool, note_reasons, create_promise_failure and dispute_or_paid_continues from multi_product; the other flags are fixed Brief B behaviour. Null flags now give one compile warning (engine default applies), false flags warn that the engine only implements true, empty closing_rule warns. Parser prompt (g3) now lists the keys and says to fill them even when a brief only points at another brief's rules. E is a delta brief, so nulls may also mean the parser was not given Brief B: build E together with A and B.

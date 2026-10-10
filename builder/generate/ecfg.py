@@ -238,6 +238,28 @@ def normalize_intents(spec):
     return out
 
 
+MP_FLAGS = ('state_all_products_first', 'ask_all_today_first', 'per_product_band_and_attempts', 'single_confirmation_for_all',
+            'dispute_or_paid_continues', 'no_notes_on_transfer')
+
+
+def mp_flag_warnings(mp):
+    """The multi-product behaviours below are fixed in the engine (state all products, ask for all today, per-product band,
+    one confirmation, dispute/paid go on, no notes on transfer). A null flag runs that default; false asks for something
+    the engine does not implement. Both are said out loud."""
+    if not isinstance(mp, dict):
+        return []
+    out = []
+    unset = [k for k in MP_FLAGS if mp.get(k) is None]
+    if unset:
+        out.append('multi_product flags not filled by the parser (%s): the engine default applies' % ', '.join(unset))
+    for k in MP_FLAGS:
+        if mp.get(k) is False and k != 'dispute_or_paid_continues':
+            out.append('multi_product.%s is false, but the engine only implements the true behaviour' % k)
+    if mp.get('closing_rule') is None:
+        out.append('multi_product.closing_rule is empty: the engine closes promise if any recorded, paid if all paid, else no promise')
+    return out
+
+
 def _build(spec, warns_out):
     cal = config_from_spec(spec)
     meta = spec.get('meta') or {}
@@ -257,6 +279,7 @@ def _build(spec, warns_out):
             warns_out.append('intent %s: the spec does not say whether the call goes on with the other products; multi-product default is to continue' % v_['id'])
 
     warns = warns_out
+    warns.extend(mp_flag_warnings(mp))
     inc0 = ds.get('include') or []
     f_pd0 = amts.get('past_due_field') or (inc0[0] if len(inc0) > 0 else 'past_due')
     tl = spec.get('tools') or {}

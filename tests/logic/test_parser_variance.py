@@ -119,5 +119,27 @@ class ContinuesShapes(unittest.TestCase):
         self.assertFalse(E['intents']['sp_dispute']['continues'])
 
 
+class FreshE(unittest.TestCase):
+    """tests/fixtures/spec-e-fresh.json: a real fresh parse of Brief E whose multi_product flags are all null."""
+
+    def test_defaults_and_warnings(self):
+        spec = load('tests/fixtures/spec-e-fresh.json')
+        E, warns = ecfg.build_E_warn(spec)
+        self.assertTrue(E['use_notes'])
+        self.assertTrue(E['intents']['sp_dispute']['continues'])
+        self.assertTrue(any(w.startswith('multi_product flags not filled') and 'dispute_or_paid_continues' in w for w in warns), warns)
+        self.assertTrue(any('closing_rule is empty' in w for w in warns))
+        self.assertEqual(ecfg.blocking_warnings(warns), [])
+
+    def test_false_flag_is_reported_as_unsupported(self):
+        spec = load('tests/fixtures/spec-e-fresh.json')
+        spec['multi_product']['single_confirmation_for_all'] = False
+        self.assertTrue(any('single_confirmation_for_all is false' in w for w in ecfg.build_E_warn(spec)[1]))
+
+    def test_filled_flags_are_quiet(self):
+        spec = copy.deepcopy(load('builder/specs/brief-ab.spec.json'))
+        self.assertFalse(any('not filled' in w for w in ecfg.build_E_warn(spec)[1]))
+
+
 if __name__ == '__main__':
     unittest.main()
