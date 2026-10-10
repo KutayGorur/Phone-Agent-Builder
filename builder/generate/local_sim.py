@@ -174,7 +174,7 @@ VARIANTS = {
           'TG-03': 'identity',
           'TG-04': [I('hardship'), I('refuse')],
           'TG-05': [I('offer', x_date='Wednesday 20 January'), I('offer', x_amount='72', x_date='Wednesday 20 January'), I('agree'), I('agree')],
-          'TG-06': [I('offer', x_date='tomorrow', x_product='card'), I('agree'), I('refuse'), I('refuse'), I('agree')],
+          'TG-06': [I('offer', x_date='tomorrow', x_product='card'), I('agree'), I('refuse'), I('refuse'), I('refuse'), I('agree')],
           'TG-08': [I('restructuring')]},
     'h': {'TH-01': [I('agree'), I('agree')],
           'TH-02': [TP('other'), TP('gives_time', 'tomorrow', 'nine forty-five in the morning')],
