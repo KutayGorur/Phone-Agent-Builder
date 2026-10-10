@@ -65,6 +65,16 @@ python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<b
 - [ ] screenshot or copy of the submission confirmation saved to `team/comms/`
 - [ ] who clicks submit: Kutay (account owner)
 
+## 7a. Submission (verified 2026-10-10 against https://www.freyavoice.ai/hackathon)
+- Delivery: email. "Before 20:00 UTC, send the form below to the address in your kit email." The address is not on the page; find it in the kit email (Kutay).
+- Form fields: `team`, `repo`, `commit`, `run_command`, `workflows` (one path per brief), `traces` (one path per brief). Example paths on the page: `submission/hidden-1.workflow.json`, `traces/hidden-1.log` (examples, not a naming rule).
+- Run command: `python3 builder/build.py {brief_path} {tool_api_path}`, example `... 2>&1 | tee traces/hidden-1.log`.
+- "Submit one phone agent per brief, with the trace of the run that made it. Do not edit a phone agent after the run."
+- "Export each phone agent to a file with `freya.export_workflow` and commit the files." Top ten teams: "we clone the repository at that commit", so the commit must include the exports and traces and be pushed.
+- Trace: plain text, no required format; start/end time, every model call (model + one-line reason), what was created on Freya (workflow ID, agent ID, steps, tools), any self-test with result. "Remove API keys before you commit." Coding agent session logs are optional.
+- Limits: 30 min per brief including self-tests; up to 10 workflows per workspace (the README says 200; keep the workspace tidy anyway).
+- Gap to note: our builder writes `out/<stem>.workflow.json` and `traces/<stem>-<time>.trace.txt`; copy/commit them to the paths you list in the form.
+
 ## 8. Fallbacks and contacts
 - Platform down at 19:00 (errors from `freya.workspace_id()`, or sandbox "Failed to reach snekbox" in sims): a build does not need sims, so run the build anyway; export is a plain GET. Do not burn credits retrying sims.
 - Parser LLM down: the builder falls back and the trace says so; rerun once after a few minutes.
@@ -72,7 +82,7 @@ python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<b
 - Coordination: `team/comms/BOARD.md`, `SIM-LOCK.md`, inbox files in `team/comms/`.
 
 ## To confirm with Kutay before Sunday
-1. Exact submission mechanism (form/upload/email) and required fields: not in the kit README.
+1. Submission mechanism: DONE, see 7a. Still needed: the email address from the kit email.
 2. Whether the final briefs come as files, and the exact tool API file names.
 3. That the judges' machine has `claude` CLI or `ANTHROPIC_API_KEY` for the parser (our parser needs it; see the Brief A fresh-clone note in `log-claude-inan.md`).
 
@@ -81,3 +91,9 @@ python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<b
 - Fresh clone of main, multi-file dry run (`build.py --dry-run briefs/brief-a.md briefs/brief-b.md tools/openapi.json`): wrote `out/brief-a-brief-b.workflow.json`, `.spec.json`, `.source.txt` and a trace named `brief-a-brief-b-<time>.trace.txt`. That run ended `status=degraded` because every `claude` CLI call failed after ~3 s with cost 0 (the machine's Claude usage limit, not a builder bug). So: the parser needs a working `claude` login or API key at run time; check this in pre-flight with a real call, not just `claude --version`.
 - Freya judge can hang: a sim stayed 'running' for 45+ min on one call whose transcript was fine. Cancel with `POST /api/v2/simulations/<id>/cancel` (`freya.api("POST", f"/api/v2/simulations/{sid}/cancel", {})`). `/stop` does not exist. Builds do not depend on sims.
 - Cloudflared is installed on Kutay's machine, but starting a public tunnel was blocked by the session's permission mode, so Brief D has not been simulated against the stand-in bank.
+
+## Fresh-clone dry run, cloud (2026-10-10, no PC, no Freya calls)
+- Cloud container, `claude` CLI 2.1.296 logged in (real `claude -p` call works), no `ANTHROPIC_API_KEY`: so a build needs only a working `claude` login or API key, nothing on Kutay's PC. Python 3.13, no pip installs needed.
+- Logic tests (5 + 56) OK, parser selftest OK. `build.py --dry-run` ends `status=ok`: Brief A 26 s, A+B 52 s, C 46 s, D 114 s, E 85 s.
+- `local_sim.py` crashes on a fresh clone (StopIteration) until `out/brief-c|d|e.spec.json` exist (they are gitignored, only f/g/h specs are committed). Generate first: `for x in c d e; do python3 builder/build.py --dry-run test-briefs/brief-$x.md test-briefs/tools-$x.openapi.json; done`. Needs `FREYA_API_KEY` set to any value for dry run to start? Not required in the run above.
+- After that, local_sim shows 2 FAILs on freshly parsed specs: D TD-03 (second promise 480 vs expected 120, overdraft floor) and E TE-04 (leftover steps after close). Likely parser variance on C/D/E; reported to the builder owner, not fixed here.
