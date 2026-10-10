@@ -233,5 +233,49 @@ class R8DurablePromiseFlag(unittest.TestCase):
         self.assertEqual(sorted(vs), ['cp_ok', 'promise_recorded'])
 
 
+class R11R12(unittest.TestCase):
+    def test_r11_non_finite_and_duplicate_ids_are_left_out_and_recorded(self):
+        p = probe_with('ab', [dict(PERSONAL, past_due='inf'), CAR])
+        self.assertEqual([x['id'] for x in p.st['prods']], ['p2'])
+        self.assertEqual(p.st['skipped'], ['p1'])
+        self.assertEqual(p.v['plan_skipped'], 'p1')
+        p = probe_with('ab', [dict(PERSONAL, type='mortgage'), CAR])          # an unfamiliar type is the bank's data: kept
+        self.assertEqual([x['id'] for x in p.st['prods']], ['p1', 'p2'])
+        p = probe_with('ab', [PERSONAL, dict(PERSONAL)])
+        self.assertEqual([x['id'] for x in p.st['prods']], ['p1'])
+        self.assertEqual(p.v['plan_skipped'], 'p1')
+
+    def test_r11_all_rows_invalid_closes_as_service_error(self):
+        p = probe_with('ab', [dict(PERSONAL, past_due='inf')])
+        self.assertEqual((p.v['route'], p.v['close_outcome']), ('fin', 'no_promise'))
+
+    def test_r11_valid_account_has_nothing_skipped(self):
+        p = probe_with('ab', [PERSONAL, CAR])
+        self.assertEqual(p.st['skipped'], [])
+        self.assertEqual(p.v['plan_skipped'], '')
+
+    def test_r12_closing_does_not_repeat_the_per_record_acknowledgement(self):
+        p = probe_with('g', [G1, G2])
+        p.say('agree')
+        p.say('agree')
+        p.create(ok=True)
+        p.say('none')
+        p.create(ok=False)
+        p.create(ok=False)
+        self.assertEqual(p.v['route'], 'note')                           # the failed product is noted first
+        p.v['nt_ok'] = 'true'
+        p.run()
+        self.assertEqual(p.v['route'], 'fin')
+        self.assertEqual(p.v['bye_text'].count('confirmed by email'), 0)
+        self.assertIn('could not record', p.v['bye_text'])
+
+    def test_r12_unacknowledged_records_still_get_the_sentence(self):
+        p = probe_with('g', [G1])
+        p.say('agree')
+        p.say('agree')
+        p.create(ok=True)
+        self.assertEqual(p.v['bye_text'].count('confirmed by email'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

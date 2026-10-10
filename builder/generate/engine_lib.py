@@ -396,11 +396,15 @@ def label_for(raw):
 
 
 def usable(raw):
-    """A product the bank sent without an id, an amount past due or the days late cannot be spoken about or recorded."""
+    """A product the bank sent without an id, a finite amount past due or the days late cannot be spoken about or
+    recorded. An unfamiliar type is kept: it is the bank's own data and the spec's type list may be incomplete."""
     try:
         if not str(raw.get('product_id') or '').strip():
             return False
-        return float(raw.get(E['f_pd'])) > 0 and int(float(raw.get(E['f_days']))) >= 0
+        pd = float(raw.get(E['f_pd']))
+        if pd != pd or pd in (float('inf'), float('-inf')):
+            return False
+        return pd > 0 and int(float(raw.get(E['f_days']))) >= 0
     except Exception:
         return False
 
@@ -581,7 +585,9 @@ def final(st, lead=''):
     bad = [p for p in prods if p['status'] in ('noted', 'failed')]
     if rec:
         items = ['%s, %s on %s' % (p['label'], money(p['amt']), dstr(from_iso(p['date']))) for p in rec]
-        txt = 'Your promise is recorded: ' + '; '.join(items) + '. ' + E['after_recorded']
+        txt = 'Your promise is recorded: ' + '; '.join(items) + '.'
+        if not all(p.get('ack') for p in rec):      # a record already acknowledged one by one is not announced again
+            txt += ' ' + E['after_recorded']
         fails = [p for p in prods if p['status'] == 'failed']
         if fails:
             txt += ' I could not record the promise for ' + ' and '.join(p['label'] for p in fails) + '.'
@@ -1278,6 +1284,7 @@ def created(st):
     if st['cq']:
         if ok and E.get('ack_scope') == 'per_record':
             st['ackw'] = 1
+            p['ack'] = 1
             return speak('Your promise for %s is recorded. %s' % (p['label'], E['after_recorded']))
         return set_create(st)
     st['phase'] = 'nego'
@@ -1293,7 +1300,17 @@ def plan(st):
         st['phase'] = 'nego'
         c = E['create_failed']
         return set_close(c['outcome'], c['reason'], goodbye('I am sorry, I cannot access your account right now.'))
-    raws = [r for r in raws if usable(r)]
+    kept, skipped, seen = [], [], set()
+    for r in raws:
+        pid = str(r.get('product_id') or '').strip()
+        if usable(r) and pid not in seen:           # a repeated id would let one record stand for two products
+            seen.add(pid)
+            kept.append(r)
+        else:
+            skipped.append(pid or '?')
+    raws = kept
+    st['skipped'] = skipped
+    vars['plan_skipped'] = ','.join(skipped)          # rows of the account that were left out, for the trace
     if not raws:
         st['phase'] = 'nego'
         c = E['create_failed']
