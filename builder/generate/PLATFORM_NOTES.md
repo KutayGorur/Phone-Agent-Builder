@@ -26,3 +26,11 @@ Probe scripts are in `dev/` (`probe1.py` .. `probe3.py`, `run_probe.py`, `probe_
 ## Misc
 - The mock bank's `/v1/practice/sessions` (body `{"case": "PUB-12"}`, header `x-team-key`) gives the call variables; `/v1/practice/ledger/<customer_id>` shows what was recorded. See `dev/probe3_run.py`.
 - `.freya-agents.json` (slot -> workflow ids) is shared by all threads; use own slot names.
+
+## Enum variables reject `''`
+Code that writes `''` into a variable declared as an extraction enum gets `variable 'x' rejected by schema validation` (the call still goes on, the old value stays). Reset enum variables to a neutral enum value (`none`, `other`) instead.
+
+## Freya call log (generator thread)
+- 10 Oct, early: probes `gen-probe`, `gen-probe2`, `gen-probe3`: about 12 chat messages in total, 3 saved workflows.
+- 10 Oct: `gen-a` v1 sim, 10 cases (identity tool pointed at a wrong URL, all failed); v2 sim, 10 cases (platform returned 503 / customers hung up at once); v2 sim, 2 cases (same). 3 sims, 22 calls.
+- 10 Oct 13:3x-13:5x: platform returns 503 on `/chat/message` for every workflow including old probes; `dryRun` validation still works. No further sims until it recovers. Local engine tests (`local_sim.py`, in-process bank) pass for PUB-01, 02, 04..13.

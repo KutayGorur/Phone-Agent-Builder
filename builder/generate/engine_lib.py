@@ -310,9 +310,9 @@ def load():
         st = json.loads(S('st') or '{}')
     except Exception:
         st = {}
-    if not st:
-        st = new_state()
-    return st
+    base = new_state()
+    base.update(st or {})
+    return base
 
 
 def save(st):
@@ -824,7 +824,7 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
         return True
     dec = I.get('on_decline') or {}
     st['hard_pending'] = False
-    reason = (dec.get('close') or {}).get('reason') or 'hardship'
+    reason = dec.get('reason') or 'hardship'
     for p in st['prods']:
         if p['status'] in ('open',):
             note_product(p, reason)
@@ -839,8 +839,9 @@ def turn(st):
     dt = S('x_date')
     am = S('x_amount')
     pref = S('x_product')
-    for k in ('x_intent', 'x_date', 'x_amount', 'x_product'):
+    for k in ('x_date', 'x_amount', 'x_product'):
         vars[k] = ''
+    vars['x_intent'] = 'none'
     if not it:
         it = 'none'
     prods = st['prods']
@@ -1026,7 +1027,7 @@ def first_unpassed():
 
 def idv_event(st):
     ev = S('x_stance').lower()
-    vars['x_stance'] = ''
+    vars['x_stance'] = 'other'
     qi = first_unpassed()
     if ev == 'human' and E['intents'].get('human'):
         I = E['intents']['human']
@@ -1050,8 +1051,9 @@ def tp_turn(st):
     ev = S('tp_event').lower()
     dt = S('tp_date')
     tt = S('tp_time')
-    for k in ('tp_event', 'tp_date', 'tp_time'):
-        vars[k] = ''
+    vars['tp_event'] = 'other'
+    vars['tp_date'] = ''
+    vars['tp_time'] = ''
     tp = E['tp']
     if ev == 'wrong_number':
         c = tp['wrong_number']
@@ -1131,7 +1133,7 @@ def transferred(st):
 def main():
     st = load()
     try:
-        if S('x_stance'):
+        if S('x_stance').lower() in ('refused', 'human'):
             idv_event(st)
         elif st['phase'] == 'tp':
             tp_turn(st)
