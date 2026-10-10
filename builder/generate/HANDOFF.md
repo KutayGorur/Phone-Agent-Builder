@@ -72,3 +72,7 @@ Verified on Freya (inan-gen-a v3, `--style pieces`, PUB-03/05/06/09): all four v
 ## Task 02 result (2026-10-10T19:00Z, claude-inan): spoken amounts lost their pence
 Evidence: `--style corrects` on Brief A, PUB-06, call 1876d421-33bb-447b-91f7-580de9a78f64. Extraction was right (`x_amount` = "six hundred and thirty-seven pounds and fifty pence"), `free_amount` read 637.0, below the floor 637.50, so the engine answered "I cannot record less than the minimum payment" and the judge counted a second floor offer.
 Fix (`engine_lib.free_amount`): "N <unit> and M pence/cents" and "N point/decimal d d" keep the fraction. Test: `tests/logic/test_amounts.py`. Not handled: "six thirty-seven fifty" with no unit word (read as 637).
+
+## Task 02 result (2026-10-10T19:20Z, claude-inan): a security answer said together with a question was not checked
+Evidence: hard script PUB-03, call 4ed23f66-deec-4d92-9c67-1f4b3827ecff. Third answer "the twenty-first of July, nineteen ninety. How much do I owe?": the model answered the question and never called `verify_identity`, so the third wrong answer was not counted and the call closed as `declined` instead of `failed`.
+Fix (`generate.py`, `idq_i` task): an answer that comes with a question or a remark goes to the tool first. Verified on Freya (inan-gen-a v5, hard PUB-03): three verify calls, closes `not_verified` / `failed`.

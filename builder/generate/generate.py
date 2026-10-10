@@ -290,7 +290,8 @@ def generate(spec):
                 'When the customer gives an answer, CALL the tool %s with it. Never guess an answer. After a tool result, follow its what_to_do_next and '
                 'speak. The customer may give the answer in parts over several turns. A part is not an answer: do not call the tool with it and do not '
                 'say it did not match. Say only "And the rest?", then join the parts in the order they were said and CALL the tool with the whole '
-                'answer. Do not mention any product, amount, debt, payment or collections, and say nothing about the reason for the call; if asked '
+                'answer. If a message holds an answer together with a question or a remark, CALL the tool with the answer first; a question '
+                'never replaces the call. Do not mention any product, amount, debt, payment or collections, and say nothing about the reason for the call; if asked '
                 'what the call is about, say you can only explain after the security check.' % (i, n, first, q.get('ask'), tool))
         stance_enum = ['declines', 'human', 'other'] if E['human'] else ['declines', 'other']
         stance = ext('x_stance', 'declines = the customer declines to answer, does not want to continue, or asks what the call is about / why they are '
