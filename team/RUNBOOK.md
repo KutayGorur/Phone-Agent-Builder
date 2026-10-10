@@ -65,6 +65,16 @@ python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<b
 - [ ] screenshot or copy of the submission confirmation saved to `team/comms/`
 - [ ] who clicks submit: Kutay (account owner)
 
+## 7a. Submission (verified 2026-10-10 against https://www.freyavoice.ai/hackathon)
+- Delivery: email. "Before 20:00 UTC, send the form below to the address in your kit email." The address is not on the page; find it in the kit email (Kutay).
+- Form fields: `team`, `repo`, `commit`, `run_command`, `workflows` (one path per brief), `traces` (one path per brief). Example paths on the page: `submission/hidden-1.workflow.json`, `traces/hidden-1.log` (examples, not a naming rule).
+- Run command: `python3 builder/build.py {brief_path} {tool_api_path}`, example `... 2>&1 | tee traces/hidden-1.log`.
+- "Submit one phone agent per brief, with the trace of the run that made it. Do not edit a phone agent after the run."
+- "Export each phone agent to a file with `freya.export_workflow` and commit the files." Top ten teams: "we clone the repository at that commit", so the commit must include the exports and traces and be pushed.
+- Trace: plain text, no required format; start/end time, every model call (model + one-line reason), what was created on Freya (workflow ID, agent ID, steps, tools), any self-test with result. "Remove API keys before you commit." Coding agent session logs are optional.
+- Limits: 30 min per brief including self-tests; up to 10 workflows per workspace (the README says 200; keep the workspace tidy anyway).
+- Gap to note: our builder writes `out/<stem>.workflow.json` and `traces/<stem>-<time>.trace.txt`; copy/commit them to the paths you list in the form.
+
 ## 8. Fallbacks and contacts
 - Platform down at 19:00 (errors from `freya.workspace_id()`, or sandbox "Failed to reach snekbox" in sims): a build does not need sims, so run the build anyway; export is a plain GET. Do not burn credits retrying sims.
 - Parser LLM down: the builder falls back and the trace says so; rerun once after a few minutes.
@@ -72,7 +82,7 @@ python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<b
 - Coordination: `team/comms/BOARD.md`, `SIM-LOCK.md`, inbox files in `team/comms/`.
 
 ## To confirm with Kutay before Sunday
-1. Exact submission mechanism (form/upload/email) and required fields: not in the kit README.
+1. Submission mechanism: DONE, see 7a. Still needed: the email address from the kit email.
 2. Whether the final briefs come as files, and the exact tool API file names.
 3. That the judges' machine has `claude` CLI or `ANTHROPIC_API_KEY` for the parser (our parser needs it; see the Brief A fresh-clone note in `log-claude-inan.md`).
 
