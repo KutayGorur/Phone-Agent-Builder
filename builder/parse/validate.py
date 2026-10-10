@@ -190,7 +190,7 @@ def _check_coverage(spec, units, tools, errors, warnings, shaky):
     for uid, val in cov.items():
         for part in split_coverage(val):
             low = part.lower()
-            if low.startswith(("context", "superseded", "overridden", "replaced")):
+            if low.startswith(("context", "superseded", "overridden", "replaced", "open_questions")):   # open questions live in spec.parser, not in the spec body
                 for ref in re.findall(r"\b[a-z0-9]+:(?:p|t)?\d+\b|\b(?:p|t)\d+\b", part):
                     pass
                 continue
