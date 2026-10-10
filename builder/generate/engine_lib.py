@@ -273,8 +273,11 @@ def amount_check(text):
             return 'ok', float(m.group(1).replace(',', '')) + int(m.group(2)) / 100.0
         if re.search(r'\d,\d{1,2}(?!\d)|\d\s*p\b|\b(pence|pennies|penny)\b', t):
             return 'unclear', None
+        d = re.sub(r'(?<![\w.])(\d+(?:\.\d+)?) ?(?:k|grand)\b', lambda mm: str(int(float(mm.group(1)) * 1000)), d)   # "2k", "two grand"
+        if re.search(r'\b(half|grand)\b', d):             # "one and a half grand": not worked out, ask again
+            return 'unclear', None
         nums = set()
-        for x in re.findall(r'\d+(?:,\d{3})*(?:\.\d+)?', digitize(t)):
+        for x in re.findall(r'\d+(?:,\d{3})*(?:\.\d+)?', d):
             nums.add(float(x.replace(',', '')))
         if len(nums) > 1:
             return 'unclear', None

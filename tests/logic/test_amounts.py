@@ -33,13 +33,21 @@ CASES = [
     ('1,250.00', 1250.0),
     ('four hundred and twenty', 420.0),
     ('300 dollars', 300.0),
+    ('two k', 2000.0),
+    ('2k', 2000.0),
+    ('one and a half grand', None),
+    ('two grand', 2000.0),
 ]
 
 
 class Amounts(unittest.TestCase):
     def test_spoken_amounts(self):
         for text, want in CASES:
-            self.assertAlmostEqual(free_amount(text), want, places=2, msg=text)
+            got = free_amount(text)
+            if want is None:
+                self.assertIsNone(got, text)
+            else:
+                self.assertAlmostEqual(got, want, places=2, msg=text)
 
 
 if __name__ == '__main__':
