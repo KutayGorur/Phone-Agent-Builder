@@ -134,7 +134,11 @@ def validate(spec, units, tools):
     closing = spec.get("closing") or {}
     for o in (closing.get("outcomes") or []):
         if isinstance(o, dict) and o.get("outcome"):
-            table[o["outcome"]] = set(o.get("reasons") or [])
+            reasons = o.get("reasons") or []
+            if not isinstance(reasons, list) or not all(isinstance(x, str) for x in reasons):
+                errors.append(f"closing.outcomes '{o['outcome']}': reasons must be a list of strings, got {reasons!r}")
+                reasons = [x for x in reasons if isinstance(x, str)] if isinstance(reasons, list) else []
+            table[o["outcome"]] = set(reasons)
             if close_outcomes and o["outcome"] not in close_outcomes:
                 errors.append(f"closing.outcomes has outcome '{o['outcome']}', not in the tool API close_call enum {close_outcomes}")
     if close_outcomes and table:
