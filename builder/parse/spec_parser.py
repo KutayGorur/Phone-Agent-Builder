@@ -197,7 +197,7 @@ def parse(brief_paths, tool_api_path):
                 return _degraded(all_units, sources, tools_block, f"all extraction calls failed ({missing})")
             _note(f"extraction groups missing: {missing}; their sections stay null and are repaired below")
         sections, extra, cov, questions = _merge_extract(list(results.values()), unit_ids)
-        spec = _assemble(sections, extra, cov, questions)
+        spec = normalize_intents(_assemble(sections, extra, cov, questions))
         _debug("spec.after_extract.json", spec)
 
         # ---- 2-4. validate, audit, repair (at most two rounds, only while there is time)
@@ -229,7 +229,7 @@ def parse(brief_paths, tool_api_path):
                                                               spec=json.dumps(_for_prompt(spec), ensure_ascii=False, separators=(",", ":"))),
                                    EXTRACT_MODEL, timeout=min(360, max(left() - 20, 60)))
                 models_used.add(EXTRACT_MODEL)
-                spec = _apply_patch(spec, patch)
+                spec = normalize_intents(_apply_patch(spec, patch))
                 _debug(f"spec.after_repair{rnd}.json", spec)
             except Exception as e:  # noqa: BLE001
                 _note(f"repair failed: {str(e)[:200]}")
@@ -258,6 +258,53 @@ def parse(brief_paths, tool_api_path):
                       "seconds": round(time.time() - t0), "unresolved_errors": errors, "warnings": warnings, "open_questions": questions}
     order = [k for k in spec if k not in ("tools_server", "tools", "extra_rules", "rule_coverage", "parser")] + ["tools_server", "tools", "extra_rules", "rule_coverage", "parser"]
     return {k: spec[k] for k in order}
+
+
+_NOTE_ALIASES = ("note_remaining_products", "note_products_without_promise", "note_reason", "note_all_products")
+
+
+def _normalize_branch(spec, br):
+    if not isinstance(br, dict):
+        return
+    for alias in _NOTE_ALIASES:
+        v = br.get(alias)
+        if v is None or br.get("note"):
+            continue
+        reason = v.get("reason") if isinstance(v, dict) else v
+        if isinstance(reason, str) and reason:
+            br["note"] = {"reason": reason}
+            br.pop(alias)
+    n = br.get("note")
+    reason = n.get("reason") if isinstance(n, dict) else n if isinstance(n, str) else None
+    if reason and not br.get("outcome") and not isinstance(br.get("close"), dict) and not isinstance(br.get("base"), dict):
+        # a note-only branch closes by the closing table: the one outcome that lists this reason
+        hits = [o["outcome"] for o in ((spec.get("closing") or {}).get("outcomes") or [])
+                if isinstance(o, dict) and o.get("outcome") and isinstance(o.get("reasons"), list) and reason in o["reasons"]]
+        if len(hits) == 1:
+            br["base"] = {"outcome": hits[0], "reason": reason}
+
+
+def normalize_intents(spec):
+    """Map the note-keys the model invents onto the contract shape the generator reads.
+
+    on_decline / verified-style branches carry their note reason as `note: {reason}`; a bare string reason becomes that too.
+    `verified` / `unverified` are aliases of close_verified / close_unverified. Nothing is invented: only existing values move."""
+    intents = spec.get("intents")
+    if not isinstance(intents, list):
+        return spec
+    for it in intents:
+        if not isinstance(it, dict):
+            continue
+        if "close_unverified" in it or "close_verified" in it or "verified" in it or "unverified" in it:
+            for src, dst in (("verified", "close_verified"), ("unverified", "close_unverified")):
+                if isinstance(it.get(src), dict) and not it.get(dst):
+                    it[dst] = it.pop(src)
+        for key in ("on_accept", "on_decline", "close_verified", "close_unverified"):
+            _normalize_branch(spec, it.get(key))
+    pers = spec.get("persuasion")
+    if isinstance(pers, dict):
+        _normalize_branch(spec, pers.get("on_exhausted"))
+    return spec
 
 
 def _quarantine(spec, units, shape_errs):

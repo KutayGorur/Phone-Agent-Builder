@@ -93,6 +93,19 @@ def _is_dict_list(v):
     return isinstance(v, list) and all(isinstance(x, dict) for x in v)
 
 
+def _branch_reason_or_outcome(br):
+    """True when the generator can read an outcome or a reason from this branch (same shapes as ecfg._oc)."""
+    if not isinstance(br, dict):
+        return False
+    for k in ("close", "base"):
+        if isinstance(br.get(k), dict) and _branch_reason_or_outcome(br[k]):
+            return True
+    if br.get("outcome") or br.get("reason"):
+        return True
+    n = br.get("note") or br.get("add_note")
+    return bool(isinstance(n, str) and n or isinstance(n, dict) and n.get("reason") or isinstance(br.get("note_products_without_promise"), str))
+
+
 def shape_errors(spec):
     """Path-specific errors for malformed nested shapes. Every later check can then rely on these types."""
     errs = []
@@ -139,6 +152,20 @@ def shape_errors(spec):
     intents = spec.get("intents")
     if intents is not None:
         need("intents", _is_dict_list(intents), "a list of objects", intents)
+    for i, it in enumerate(intents if _is_dict_list(intents) else []):
+        for key in ("on_accept", "on_decline"):
+            br = it.get(key)
+            if br is None:
+                continue
+            if not isinstance(br, dict):
+                errs.append(f"intents[{i}].{key} must be an object, got {str(br)[:80]!r}")
+            elif not _branch_reason_or_outcome(br):
+                errs.append(f"intents[{i}].{key} has no readable outcome, reason or note: give it close {{outcome, reason}} or note {{reason}} (found keys {sorted(br)})")
+        if "max" in it and it.get("max"):
+            for key in ("close_verified", "close_unverified"):
+                br = it.get(key)
+                if br is not None and not (isinstance(br, dict) and _branch_reason_or_outcome(br)):
+                    errs.append(f"intents[{i}].{key} has no readable outcome, reason or note: give it close {{outcome, reason}} or note {{reason}}")
     for key in ("debt_statement", "amounts"):
         sec(key)
     ds = spec.get("debt_statement")

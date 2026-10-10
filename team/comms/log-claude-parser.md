@@ -11,3 +11,9 @@
 - Remaining 2 errors were `rule_coverage -> open_questions[0]`: validate now accepts open_questions as context. Revalidated offline: 0 errors.
 - Saved builder/specs/brief-h.spec.json (also out/brief-h.spec.json). TASK 05: you can finish H from it (local_sim h scenario).
 - Cause of the original degrade not reproduced (model output varies); every nested-shape path now gives an error or a one-section fallback instead of an exception.
+
+## 2026-10-10T19:50Z follow-up from task 05 (TH-04, TH-06)
+- Parser did not drop intent actions. H's hardship uses on_accept/on_decline like A and G, but on_decline had `note_remaining_products` (an invented key) and no outcome; persuasion.on_exhausted had `note_reason` and no outcome, so ecfg took r_nopromise from the text of "when" and picked PAID_CLAIM.
+- Generic fix: spec_parser.normalize_intents (runs after extract and after each repair) maps invented note keys to `note: {reason}` and, for a note-only branch, fills `base: {outcome, reason}` from the single closing outcome that lists the reason. validate.shape_errors now flags on_accept/on_decline/close_verified/close_unverified with no readable outcome/reason/note.
+- H spec updated offline (no re-parse). local_sim: 61/62; TH-04 passes.
+- TH-06 is a script bug in local_sim.py (task 05's file): step 2 `agree` accepts the loan offer, then the later `refuse` steps never reach a close. With script [offer card tomorrow, refuse, refuse, agree] the engine closes COMMIT + NO_AGREEMENT note on p2 and passes.

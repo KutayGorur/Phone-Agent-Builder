@@ -258,9 +258,15 @@
   ],
   "do_not_repeat_refused_offer": "never repeat an identical rejected amount/date pair",
   "on_exhausted": {
-   "note_reason": "NO_AGREEMENT",
    "brief_code": "REFUSED",
-   "then": "normal closing priority (multi_product.closing_rule)"
+   "then": "normal closing priority (multi_product.closing_rule)",
+   "note": {
+    "reason": "NO_AGREEMENT"
+   },
+   "base": {
+    "outcome": "NO_COMMIT",
+    "reason": "NO_AGREEMENT"
+   }
   }
  },
  "confirmation": {
@@ -348,12 +354,15 @@
     }
    },
    "on_decline": {
-    "note_remaining_products": {
-     "reason": "DISTRESS",
-     "brief_code": "HARDSHIP"
-    },
     "applies_when": "no volunteered promise",
-    "close": "normal closing priority"
+    "close": "normal closing priority",
+    "note": {
+     "reason": "DISTRESS"
+    },
+    "base": {
+     "outcome": "NO_COMMIT",
+     "reason": "DISTRESS"
+    }
    },
    "source": "p19"
   },
@@ -415,14 +424,17 @@
     "reason": "refused_security",
     "brief_code": "NOT_VERIFIED / DECLINED"
    },
-   "verified": {
-    "note_remaining_products": {
-     "reason": "NO_AGREEMENT",
-     "brief_code": "REFUSED"
+   "source": "p20",
+   "close_verified": {
+    "close": "normal closing priority",
+    "note": {
+     "reason": "NO_AGREEMENT"
     },
-    "close": "normal closing priority"
-   },
-   "source": "p20"
+    "base": {
+     "outcome": "NO_COMMIT",
+     "reason": "NO_AGREEMENT"
+    }
+   }
   }
  ],
  "multi_product": {

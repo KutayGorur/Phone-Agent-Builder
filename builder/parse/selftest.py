@@ -28,7 +28,7 @@ def run(name, briefs):
     llm.complete = fake
     spec_parser.DEBUG_DIR = ROOT / "out" / "parse-selftest"
     out = spec_parser.parse([ROOT / b for b in briefs], ROOT / "tools" / "openapi.json")
-    gold = {k: v for k, v in golden.items()}
+    gold = spec_parser.normalize_intents({k: v for k, v in golden.items()})   # the parser normalises note-only intent branches
     diff = [k for k in gold if gold[k] != out.get(k)]
     print(name, "parser errors:", out["parser"]["unresolved_errors"], "warnings:", len(out["parser"]["warnings"]), "differs from golden in:", diff)
     return not out["parser"]["unresolved_errors"] and not diff
