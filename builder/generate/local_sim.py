@@ -181,7 +181,7 @@ VARIANTS = {
           'TH-03': 'identity',
           'TH-04': [I('hardship'), I('refuse')],
           'TH-05': [I('offer', x_date='Wednesday 10 February'), I('offer', x_amount='72', x_date='Wednesday 10 February'), I('agree'), I('agree')],
-          'TH-06': [I('offer', x_date='tomorrow', x_product='card'), I('agree'), I('refuse'), I('refuse'), I('refuse')],
+          'TH-06': [I('offer', x_date='tomorrow', x_product='card'), I('refuse'), I('refuse'), I('agree')],
           'TH-08': [I('restructuring')]}
 }
 
