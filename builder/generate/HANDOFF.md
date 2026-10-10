@@ -29,3 +29,6 @@ Graph (node ids):
 - Chat route does not speak the opening tts; use real simulations for end-to-end checks.
 - Only one simulation per workspace at a time; use own slots (`gen-a`, `gen-ab`); never edit an agent by hand; do not touch `AGENT_LLM`.
 - Git: commit only `builder/generate/`; `.freya-agents.json` is shared and uncommitted.
+
+## Update (10 Oct, later)
+Built: `ecfg.py`, `generate.py`, `local_sim.py` (scripted extractions + in-process bank + real scorer; all of PUB-01,02,04..13 pass), identity hooks unit-checked. `python -m builder.generate.generate <spec> <out.json>`. Generated for A, A+B, C, D, E; `harness/preflight.py` = 0 errors for all. Freya returned 503 on every chat call (even old probe workflows) from about 13:35 UTC; `gen-a` is saved (v2) but never ran end to end. Next: when Freya recovers, one chat message, then `python ci/sim.py <agent_id> --workflow out/gen-a.workflow.json --brief A --only PUB-01,PUB-09 --why ...`, read transcripts (`dev/showcall.py results/x.json PUB-01`), fix, then more cases. Untested on platform: extraction accuracy, identity tool calls, farewell tts before close_call, `end_call` node.

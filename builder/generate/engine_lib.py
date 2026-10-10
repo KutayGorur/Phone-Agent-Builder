@@ -159,6 +159,11 @@ def _mk(y, m, dd):
 def free_date(text, today):
     """Words of a customer -> ('date', date) | ('vague', None) | ('none', None)."""
     try:
+        m = re.search(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b', str(text))
+        if m:
+            d = _mk(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            if d:
+                return 'date', d
         t = digitize(text)
         t = re.sub(r'(\d)\s*(st|nd|rd|th)\b', r'\1', t)
         t = re.sub(r'\s+', ' ', t).strip()
