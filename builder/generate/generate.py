@@ -282,13 +282,13 @@ def generate(spec):
                 'When the customer gives an answer, CALL the tool %s with it. Never guess an answer. After a tool result, follow its what_to_do_next and '
                 'speak. Do not mention any product, amount, debt, payment or collections, and say nothing about the reason for the call; if asked '
                 'what the call is about, say you can only explain after the security check.' % (i, n, first, q.get('ask'), tool))
-        stance_enum = ['refused', 'human', 'other'] if 'human' in E['intents'] else ['refused', 'other']
-        stance = ext('x_stance', 'refused = the customer declines to answer, does not want to continue, or asks what the call is about / why they are '
+        stance_enum = ['declines', 'human', 'other'] if E['human'] else ['declines', 'other']
+        stance = ext('x_stance', 'declines = the customer declines to answer, does not want to continue, or asks what the call is about / why they are '
                      'called instead of answering. %sother = anything else (an answer, a question about whether you are a robot, a scam question).' %
-                     ('human = asks for a person or a human agent. ' if 'human' in E['intents'] else ''), stance_enum)
+                     ('human = asks for a person or a human agent. ' if E['human'] else ''), stance_enum)
         trans = [tr('fin_idv_failed', 'idq%d_state' % i, 'equals', 'locked'), tr(nxt, 'idq%d_state' % i, 'equals', 'passed'),
-                 tr('engine', 'x_stance', 'equals', 'refused')]
-        if 'human' in E['intents']:
+                 tr('engine', 'x_stance', 'equals', 'declines')]
+        if E['human']:
             trans.append(tr('engine', 'x_stance', 'equals', 'human'))
         trans.append(tr('idq_%d' % i))
         nodes['idq_%d' % i] = conv('idq_%d' % i, task, [stance], trans, tools=[fn])
@@ -317,7 +317,7 @@ def generate(spec):
          'none = nothing relevant']
     for k, v in E['intents'].items():
         d.append('%s = %s' % (k, v['desc']))
-    intent_desc = ('Classify the customer\'s LAST message into exactly one value. Priority: hardship, then the special requests, then the rest. ' +
+    intent_desc = ('Classify the customer\'s LAST message into exactly one value. Priority: a mention of illness, a death in the family or losing a job comes first, then the special requests, then the rest. ' +
                    '; '.join(d) + '.')
     sm_ext = [ext('x_intent', intent_desc, ids),
               ext('x_date', 'The day or period the customer names for paying, in their own words (e.g. "Friday", "the 23rd", "next week", "6 November", '

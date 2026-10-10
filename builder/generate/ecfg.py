@@ -32,8 +32,14 @@ def _oc(d):
             if r['outcome'] or r['reason']:
                 return r
     reason = d.get('reason')
-    if reason is None and isinstance(d.get('note'), dict):
-        reason = d['note'].get('reason')
+    if reason is None:
+        n = d.get('note')
+        if isinstance(n, dict):
+            reason = n.get('reason')
+        elif isinstance(n, str):
+            reason = n
+        elif isinstance(d.get('note_products_without_promise'), str):
+            reason = d['note_products_without_promise']
     return {'outcome': d.get('outcome'), 'reason': reason}
 
 
@@ -74,8 +80,6 @@ def normalize_intents(spec):
         if 'on_accept' in it or it.get('offer_transfer'):
             d['kind'] = 'offer'
             d['offer_name'] = (_s(it.get('offer_transfer')) + ' team').strip()
-            if it.get('offer_transfer') == 'support':
-                d['offer_name'] = 'customer support team'
             acc = it.get('on_accept') or {}
             d['on_accept'] = {'queue': acc.get('transfer') or it.get('offer_transfer'), 'close': _oc(acc)}
             dec = it.get('on_decline') or {}
@@ -88,21 +92,23 @@ def normalize_intents(spec):
         elif act.get('transfer'):
             d['kind'] = 'transfer'
             d['queue'] = act['transfer']
-            d['close'] = _oc(act.get('close'))
+            d['close'] = _oc(act.get('close') if isinstance(act.get('close'), dict) else {})
             d['transfer_say'] = 'I am transferring you now.'
         elif act.get('note') or act.get('close'):
             d['kind'] = 'note' if act.get('note') else 'close'
+            if isinstance(act.get('close'), dict):
+                d['close'] = _oc(act['close'])
             if act.get('note'):
-                d['note_reason'] = (act['note'] or {}).get('reason')
+                d['note_reason'] = _oc({'note': act['note']})['reason']
             else:
-                c = act['close']
+                c = act['close'] if isinstance(act['close'], dict) else {}
                 d['note_reason'] = c.get('reason') or c.get('outcome')
-            d['continues'] = bool(act.get('continue_with_other_products'))
+            d['continues'] = bool(act.get('continue_with_other_products') or act.get('continue'))
         elif it.get('continue'):
             d['kind'] = 'continue'
         else:
             continue
-        out[iid] = d
+        out['sp_' + iid] = d
     return out
 
 
@@ -135,26 +141,39 @@ def build_E(spec):
 
     outs = closing.get('outcomes') or []
     names = [o.get('outcome') for o in outs]
-    out = {'promise': 'promise', 'paid': None, 'no_promise': None, 'transferred': None}
-    for o in outs:
-        w = _s(o.get('when')).lower()
-        n = o.get('outcome')
-        if 'promise was recorded' in w or n == 'promise':
-            out['promise'] = n
-    ap = intents.get('already_paid') or {}
+
+    def find(pred):
+        for o in outs:
+            if pred(o):
+                return o
+        return None
+    wh = lambda o: _s(o.get('when')).lower()
+    promise_o = find(lambda o: not o.get('reasons') and 'promise' in wh(o) and 'no promise' not in wh(o)) or find(lambda o: not o.get('reasons'))
+    ap = intents.get('sp_already_paid') or {}
     paid_reason = ap.get('note_reason') or 'paid'
-    out['paid'] = (ap.get('close') or {}).get('outcome') if ap.get('close') else ('paid' if 'paid' in names else None)
-    if not out['paid'] and 'paid' in names:
-        out['paid'] = 'paid'
-    exh = _oc(pers.get('on_exhausted')) if pers.get('on_exhausted') else {'outcome': 'no_promise', 'reason': 'refused'}
-    out['no_promise'] = exh['outcome']
+    paid_o = (ap.get('close') or {}).get('outcome') if ap.get('close') else None
+    if not paid_o:
+        po = find(lambda o: not o.get('reasons') and o is not promise_o and 'paid' in wh(o))
+        paid_o = po.get('outcome') if po else None
+    exh = _oc(pers.get('on_exhausted')) if pers.get('on_exhausted') else {'outcome': None, 'reason': None}
+    nop = find(lambda o: exh['reason'] and exh['reason'] in (o.get('reasons') or [])) or find(lambda o: 'no promise' in wh(o))
+    if not exh['outcome'] and nop:
+        exh['outcome'] = nop.get('outcome')
+    if not exh['reason'] and nop and nop.get('reasons'):
+        exh['reason'] = nop['reasons'][0]
     tr = [i for i in intents.values() if i.get('kind') == 'transfer']
-    out['transferred'] = (tr[0]['close']['outcome'] if tr else 'transferred')
+    tro = find(lambda o: 'transfer' in wh(o))
+    out = {'r_promise': promise_o.get('outcome') if promise_o else (names[0] if names else None), 'r_paid': paid_o,
+           'r_nopromise': exh['outcome'], 'r_transfer': (tr[0]['close']['outcome'] if tr else (tro.get('outcome') if tro else None))}
 
     cf = conf.get('on_create_failed') or {}
+    cfr = cf.get('reason')
     if mp and mp.get('create_promise_failure'):
-        cf = {'outcome': None, 'reason': ((mp['create_promise_failure'].get('note') or {}).get('reason') or 'service_error')}
-    create_failed = {'outcome': cf.get('outcome') or exh['outcome'], 'reason': cf.get('reason') or 'service_error',
+        cfr = _oc({'note': (mp['create_promise_failure'] or {}).get('note')})['reason'] or cfr
+    if not cfr and nop:
+        cands = [r for r in (nop.get('reasons') or []) if 'error' in _s(r).lower() or 'service' in _s(r).lower() or 'fail' in _s(r).lower()]
+        cfr = cands[0] if cands else (nop.get('reasons') or [None])[-1]
+    create_failed = {'outcome': cf.get('outcome') or exh['outcome'], 'reason': cfr,
                      'say_text': 'I am sorry, I could not record your promise.'}
 
     on_dec = ident.get('on_declined') or {}
@@ -180,7 +199,7 @@ def build_E(spec):
         'max_tries': conf.get('create_promise_max_tries') or 2, 'create_failed': create_failed,
         'intents': intents, 'out': out, 'paid_reason': paid_reason, 'n_q': len(questions),
         'idv': {'max_refusals': on_dec.get('max_refusals') or 2,
-                'declined': _oc(on_dec) if on_dec else {'outcome': 'not_verified', 'reason': 'declined'},
+                'declined': _oc(on_dec),
                 'explain': on_dec.get('explain_once') or 'the questions protect their account',
                 'failed': _oc(on_fail), 'failed_say': on_fail.get('say') or 'use the mobile app or a branch'},
         'tp': {'wrong_number': wn, 'deceased': _oc(dec), 'on_scheduled': sched, 'on_failed': failed_cb,
@@ -189,10 +208,12 @@ def build_E(spec):
                'failed_say': 'Thank you. We will try to reach them another time. Goodbye.',
                'window_text': ('today or the next business day between %s and %s' % bt) if all(bt) else 'at another time',
                'max_bad': cb.get('max_out_of_window_asks') if cb.get('max_out_of_window_asks') is not None else 1},
+        'hard': next((k for k, v in intents.items() if v.get('kind') == 'offer'), None),
+        'human': next((k for k, v in intents.items() if v.get('kind') == 'transfer' and v.get('ask_first')), None),
         'unclear': unclear,
         'ai_say': opening.get('ai_question_answer') or "I am the bank's digital assistant.",
-        'scam_say': (intents.get('scam') or {}).get('say') or 'they can verify this call with the bank\'s customer service',
-        'unknown_say': (intents.get('unknown_question') or {}).get('say') or 'I do not have that information',
+        'scam_say': (intents.get('sp_scam') or {}).get('say') or 'they can verify this call with the bank\'s customer service',
+        'unknown_say': (intents.get('sp_unknown_question') or {}).get('say') or 'I do not have that information',
     }
     return E
 

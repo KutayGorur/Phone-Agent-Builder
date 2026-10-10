@@ -69,7 +69,8 @@ def drive(spec, case, steps, verbose=False):
     return score_ledger(case, bank.ledger(cid))
 
 
-I = lambda i, **k: dict(x_intent=i, **k)
+BUILTIN = ('agree', 'refuse', 'too_much', 'offer', 'evasive', 'question', 'none')
+I = lambda i, **k: dict(x_intent=(i if i in BUILTIN else 'sp_' + i), **k)
 SCEN = {
     'PUB-01': [I('agree'), I('agree')],
     'PUB-02': [dict(tp_event='other'), dict(tp_event='gives_time', tp_date='tomorrow', tp_time='eleven in the morning')],

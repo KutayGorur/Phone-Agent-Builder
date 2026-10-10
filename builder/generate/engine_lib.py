@@ -502,17 +502,17 @@ def final(st, lead=''):
         fails = [p for p in prods if p['status'] == 'failed']
         if fails:
             txt += ' I could not record the promise for ' + ' and '.join(p['label'] for p in fails) + '.'
-        return set_close(E['out']['promise'], None, goodbye((lead + ' ' + txt).strip()))
+        return set_close(E['out']['r_promise'], None, goodbye((lead + ' ' + txt).strip()))
     reasons = [(p['note'] if p['status'] == 'noted' else E['create_failed']['reason']) for p in bad]
     paid_reason = E['paid_reason']
-    if reasons and all(r == paid_reason for r in reasons) and E['out'].get('paid'):
-        return set_close(E['out']['paid'], None, goodbye(lead.strip()))
+    if reasons and all(r == paid_reason for r in reasons) and E['out'].get('r_paid'):
+        return set_close(E['out']['r_paid'], None, goodbye(lead.strip()))
     first = next((r for r in reasons if r != paid_reason), reasons[0] if reasons else E['exhausted']['reason'])
     if any(p['status'] == 'failed' for p in prods) and not rec:
         txt = (lead + ' ' + E['create_failed']['say_text']).strip()
         return set_close(E['create_failed']['outcome'], first, goodbye(txt)) if len(prods) == 1 else \
-            set_close(E['out']['no_promise'], first, goodbye(txt))
-    return set_close(E['out']['no_promise'], first, goodbye(lead.strip()))
+            set_close(E['out']['r_nopromise'], first, goodbye(txt))
+    return set_close(E['out']['r_nopromise'], first, goodbye(lead.strip()))
 
 
 def conclude(st, lead=''):
@@ -715,8 +715,8 @@ def offer(st, p, dt, am, lead=''):
 # ------------------------------------------------------------------ special intents
 
 def hardship_offer_text():
-    I = E['intents'].get('hardship') or {}
-    qn = I.get('offer_name') or 'support team'
+    I = E['intents'].get(E['hard']) or {}
+    qn = I.get('offer_name') or 'team'
     return 'Would you like me to connect you with our %s?' % qn
 
 
@@ -809,11 +809,11 @@ def hardship_offer(st, I):
 
 def hardship_reply(st, it, dt, am, pref, scope_all):
     """The customer's reply while a support transfer is on offer."""
-    I = E['intents'].get('hardship') or {}
+    I = E['intents'].get(E['hard']) or {}
     if it == 'agree':
         acc = I.get('on_accept') or {}
         st['hard_pending'] = False
-        do_transfer(st, acc.get('queue') or 'support', (acc.get('close') or {}).get('outcome') or E['out']['transferred'],
+        do_transfer(st, acc.get('queue'), (acc.get('close') or {}).get('outcome') or E['out']['r_transfer'],
                     (acc.get('close') or {}).get('reason'), 'I am connecting you now.')
         return True
     if it in ('offer', 'change'):
@@ -824,7 +824,7 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
         return True
     dec = I.get('on_decline') or {}
     st['hard_pending'] = False
-    reason = dec.get('reason') or 'hardship'
+    reason = dec.get('reason') or E['exhausted']['reason']
     for p in st['prods']:
         if p['status'] in ('open',):
             note_product(p, reason)
@@ -1029,8 +1029,8 @@ def idv_event(st):
     ev = S('x_stance').lower()
     vars['x_stance'] = 'other'
     qi = first_unpassed()
-    if ev == 'human' and E['intents'].get('human'):
-        I = E['intents']['human']
+    if ev == 'human' and E['intents'].get(E['human']):
+        I = E['intents'][E['human']]
         st['idv_human'] += 1
         if st['idv_human'] == 1 and I.get('ask_first'):
             vars['idv_note'] = ('The customer asked for a person. First say that you can try to help and ask what they need, '
@@ -1133,7 +1133,7 @@ def transferred(st):
 def main():
     st = load()
     try:
-        if S('x_stance').lower() in ('refused', 'human'):
+        if S('x_stance').lower() in ('declines', 'human'):
             idv_event(st)
         elif st['phase'] == 'tp':
             tp_turn(st)
