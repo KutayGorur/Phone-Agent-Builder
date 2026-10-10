@@ -1,0 +1,888 @@
+{
+ "meta": {
+  "bank_name": "Freya Bank",
+  "language": "en",
+  "multi_product": true,
+  "max_products": 2,
+  "job": "Collections calls to customers who are late on one or two products: find the customer, check identity, state the debt, get a payment promise per product where possible, and close the call with the correct outcome."
+ },
+ "call_variables": [
+  {
+   "name": "customer_id",
+   "meaning": "pass to every tool call"
+  },
+  {
+   "name": "first_name",
+   "meaning": "the person to ask for"
+  },
+  {
+   "name": "last_name",
+   "meaning": "the person to ask for"
+  },
+  {
+   "name": "title",
+   "meaning": "Mr or Ms; address the customer as title plus last name"
+  },
+  {
+   "name": "now",
+   "format": "YYYY-MM-DDTHH:MM",
+   "meaning": "current date and time; all date rules use this, never the real clock"
+  }
+ ],
+ "opening": {
+  "first_sentence_must_include": [
+   "digital assistant",
+   "calling from Freya Bank",
+   "call is recorded"
+  ],
+  "forbidden_words_before_verification": [
+   "collections",
+   "debt",
+   "payment"
+  ],
+  "forbid_product_name_before_verification": true,
+  "applies_to_everyone_including_relatives": true,
+  "confirm_identity_question": "Am I speaking with {title} {last_name}?",
+  "accepted_confirmations": [
+   "yes",
+   "that's me",
+   "speaking",
+   "<customer's own name>"
+  ],
+  "not_confirmations": [
+   "hello",
+   "go ahead",
+   "who is this"
+  ],
+  "max_confirmation_asks": 2,
+  "question_answered_before_next_ask": true,
+  "on_unclear": {
+   "outcome": "not_reached",
+   "reason": "unclear"
+  },
+  "ai_question_answer": "I am Freya Bank's digital assistant."
+ },
+ "third_party": {
+  "say_nothing_beyond_opening": true,
+  "ask_when_can_be_reached": true,
+  "callback": {
+   "allowed_days": "today_or_next_business_day",
+   "window_start": "09:00",
+   "window_end": "18:00",
+   "inclusive": true,
+   "must_be_after_now": true,
+   "max_out_of_window_asks": 1,
+   "tool": "schedule_callback",
+   "on_scheduled": {
+    "outcome": "not_reached",
+    "reason": "callback"
+   },
+   "on_failed": {
+    "outcome": "not_reached",
+    "reason": "no_callback"
+   },
+   "source": "4"
+  },
+  "wrong_number": {
+   "outcome": "not_reached",
+   "reason": "wrong_number"
+  },
+  "deceased": {
+   "say": "I am so sorry for your loss.",
+   "ask_nothing_else": true,
+   "outcome": "not_reached",
+   "reason": "deceased",
+   "source": "8"
+  },
+  "relative_may_not_verify_or_pay": true
+ },
+ "identity": {
+  "questions": [
+   {
+    "field": "date_of_birth",
+    "ask": "your date of birth",
+    "format": "YYYY-MM-DD",
+    "numeric_date_order": "DMY"
+   },
+   {
+    "field": "postcode",
+    "ask": "the postcode of your registered address",
+    "format": "4 digits",
+    "brief_wording": "the postcode of the registered address, four digits",
+    "source": "2"
+   }
+  ],
+  "one_at_a_time": true,
+  "tool": "verify_identity",
+  "max_wrong_answers_total": 4,
+  "hints": [
+   {
+    "hint": "day_month_swapped",
+    "action": "ask them to say the month as a word",
+    "counts_as_wrong": false
+   }
+  ],
+  "on_failed": {
+   "do_not_state_debt": true,
+   "say": "use the mobile app or a branch",
+   "outcome": "not_verified",
+   "reason": "failed"
+  },
+  "on_declined": {
+   "explain_once": "the questions protect your account",
+   "max_refusals": 2,
+   "outcome": "not_verified",
+   "reason": "declined",
+   "asking_purpose_counts_as_refusal": true
+  }
+ },
+ "debt_statement": {
+  "after": "get_account",
+  "say": "calling from the collections team about a late payment",
+  "product_names": {
+   "credit_card": "credit card ending {card_last4}",
+   "personal_loan": "personal loan",
+   "car_loan": "car loan"
+  },
+  "include": [
+   "past_due",
+   "days_late"
+  ]
+ },
+ "calendar": {
+  "business_days": [
+   "Mon",
+   "Tue",
+   "Wed",
+   "Thu",
+   "Fri"
+  ],
+  "holidays": [
+   "2026-11-20",
+   "2026-12-24",
+   "2026-12-25",
+   "2027-01-01",
+   "2027-01-04"
+  ]
+ },
+ "bands": [
+  {
+   "name": "early",
+   "days_late_min": 1,
+   "days_late_max": 5,
+   "deadline": {
+    "business_days_after_today": 10
+   },
+   "persuasion_attempts": 1
+  },
+  {
+   "name": "late",
+   "days_late_min": 6,
+   "days_late_max": 30,
+   "deadline": {
+    "business_days_after_today": 5
+   },
+   "persuasion_attempts": 2
+  },
+  {
+   "name": "severe",
+   "days_late_min": 31,
+   "days_late_max": 60,
+   "deadline": {
+    "business_days_after_today": 3
+   },
+   "persuasion_attempts": 2,
+   "attempts_same_as_band": "late"
+  }
+ ],
+ "dates": {
+  "promise_date_rule": "today_or_later AND business_day AND <= deadline",
+  "non_business_day_before_deadline": "offer_next_business_day",
+  "after_deadline": "say the latest date you can record is the deadline and offer it; refusal of the deadline = flat refusal",
+  "vague_period": "ask_once_then_propose_deadline",
+  "next_weekday_means": "following_calendar_week",
+  "this_weekday_means": "current_week",
+  "examples": [
+   "\"next Friday\" said on a Friday is the Friday of the following week"
+  ],
+  "source": "p1"
+ },
+ "amounts": {
+  "first_ask": "full_past_due",
+  "never_ask_customer_for_amount": true,
+  "agent_proposes_every_amount": true,
+  "floor_field_by_product": {
+   "credit_card": "minimum_payment",
+   "personal_loan": "instalment_amount",
+   "car_loan": "instalment_amount"
+  },
+  "floor_offers": 1,
+  "floor_note": "say the rest stays overdue",
+  "accept_range": "floor <= amount <= past_due",
+  "below_floor": "say it cannot be recorded and offer the floor once; refusal = flat refusal",
+  "source": "p1"
+ },
+ "persuasion": {
+  "first_question": "Can you make this payment today?",
+  "customer_proposed_date_or_amount_is_never_a_refusal": true,
+  "flat_refusal_definition": "a no to paying today with no date and no amount, or a non-answer; each uses one persuasion attempt",
+  "attempts": [
+   {
+    "n": 1,
+    "amount": "full_past_due, or floor if the customer already said the full amount is too much",
+    "date": "last business day of this week; if today is that day, last business day of next week",
+    "date_token": "week_end"
+   },
+   {
+    "n": 2,
+    "amount": "floor",
+    "date": "deadline",
+    "date_token": "deadline",
+    "bands": [
+     "late",
+     "severe"
+    ]
+   }
+  ],
+  "do_not_repeat_refused_offer": true,
+  "on_exhausted": {
+   "outcome": "no_promise",
+   "reason": "refused"
+  },
+  "source": "p1"
+ },
+ "confirmation": {
+  "readback": [
+   "product",
+   "amount",
+   "date"
+  ],
+  "confirm_question": "Do you confirm?",
+  "create_only_after_clear_yes": true,
+  "recheck_changes_against": [
+   "dates",
+   "amounts"
+  ],
+  "one_promise_per_product": true,
+  "change_after_record": "say they can change it in the mobile app; a recorded promise cannot be changed or cancelled in the same call",
+  "tool": "create_promise",
+  "say_recorded_only_if_ok_true": true,
+  "create_promise_max_tries": 2,
+  "on_create_failed": {
+   "say": "you could not record it",
+   "outcome": "no_promise",
+   "reason": "service_error"
+  },
+  "after_recorded_say": "You will receive a text message and an email confirming this promise.",
+  "source": "7"
+ },
+ "intents": [
+  {
+   "id": "already_paid",
+   "say": "payments can take one business day to appear",
+   "no_promise": true,
+   "action": {
+    "close": {
+     "outcome": "paid",
+     "reason": null
+    }
+   },
+   "source": "p1"
+  },
+  {
+   "id": "dispute",
+   "description": "debt is not mine, never had this product, product closed or paid off in the past (not a payment of this past-due amount)",
+   "do_not_argue": true,
+   "no_promise": true,
+   "action": {
+    "close": {
+     "outcome": "no_promise",
+     "reason": "dispute"
+    }
+   },
+   "source": "p1"
+  },
+  {
+   "id": "restructuring",
+   "description": "request for a new payment plan or lower instalments; do not describe a plan",
+   "action": {
+    "transfer": "restructuring",
+    "close": {
+     "outcome": "transferred",
+     "reason": "restructuring"
+    }
+   },
+   "source": "p1"
+  },
+  {
+   "id": "human",
+   "ask_once_first": "ask whether you can help first",
+   "applies": "before_and_after_verification",
+   "action": {
+    "transfer": "general",
+    "close": {
+     "outcome": "transferred",
+     "reason": "human"
+    }
+   },
+   "source": "p1"
+  },
+  {
+   "id": "hardship",
+   "description": "illness, death in the family or job loss",
+   "say": "one short sentence of sympathy",
+   "no_persuasion": true,
+   "offer_transfer": "support",
+   "overrides": [
+    "persuasion attempts",
+    "restructuring"
+   ],
+   "promise_if_customer_names_date_or_amount": true,
+   "on_accept": {
+    "transfer": "support",
+    "close": {
+     "outcome": "transferred",
+     "reason": "support"
+    }
+   },
+   "on_decline": {
+    "close": {
+     "outcome": "no_promise",
+     "reason": "hardship"
+    }
+   },
+   "source": "p1"
+  },
+  {
+   "id": "scam",
+   "say": "you can verify this call by phoning Freya Bank's customer service number",
+   "continue": true,
+   "source": "p1"
+  },
+  {
+   "id": "unknown_question",
+   "description": "a question that cannot be answered from the tools",
+   "say": "I do not have that information",
+   "never_invent": [
+    "figures",
+    "dates",
+    "reasons"
+   ],
+   "continue": true,
+   "source": "p1"
+  },
+  {
+   "id": "does_not_want_to_talk",
+   "max": 2,
+   "close_verified": {
+    "outcome": "no_promise",
+    "reason": "refused"
+   },
+   "close_unverified": {
+    "outcome": "not_verified",
+    "reason": "declined"
+   },
+   "source": "p1"
+  }
+ ],
+ "multi_product": {
+  "applies": "Brief B multi-product handling applies to the products returned by get_account",
+  "max_products": 2,
+  "brief_b_three_read_as_two": true,
+  "order": "get_account",
+  "note_tool": "add_note",
+  "note_reasons": [
+   "refused",
+   "hardship",
+   "dispute",
+   "paid",
+   "service_error"
+  ],
+  "note_purpose": "record why a product ended without a promise",
+  "state_all_products_first": null,
+  "ask_all_today_first": null,
+  "per_product_band_and_attempts": null,
+  "single_date_after_deadline": null,
+  "single_confirmation_for_all": null,
+  "dispute_or_paid_continues": null,
+  "no_notes_on_transfer": null,
+  "closing_rule": null,
+  "source": "1"
+ },
+ "closing": {
+  "goodbye_before_close": true,
+  "close_tool": "close_call",
+  "exactly_one_close_call_and_it_is_last": true,
+  "outcomes": [
+   {
+    "outcome": "promise",
+    "reasons": [],
+    "when": "at least one promise was recorded"
+   },
+   {
+    "outcome": "paid",
+    "reasons": [],
+    "when": "customer already paid (Brief A rule 39)"
+   },
+   {
+    "outcome": "transferred",
+    "reasons": [
+     "restructuring",
+     "human",
+     "support"
+    ],
+    "when": "restructuring, human or hardship transfer"
+   },
+   {
+    "outcome": "no_promise",
+    "reasons": [
+     "refused",
+     "hardship",
+     "dispute",
+     "service_error"
+    ],
+    "when": "attempts exhausted or does not want to talk, hardship declined, dispute, create_promise failed twice"
+   },
+   {
+    "outcome": "not_verified",
+    "reasons": [
+     "failed",
+     "declined"
+    ],
+    "when": "too many wrong answers, declined identity questions"
+   },
+   {
+    "outcome": "not_reached",
+    "reasons": [
+     "callback",
+     "no_callback",
+     "wrong_number",
+     "deceased",
+     "unclear"
+    ],
+    "when": "callback scheduled, no callback in window, wrong number, deceased, identity unclear"
+   }
+  ],
+  "transfer_after_promise": "close as transferred with the transfer reason",
+  "unused_tools": [],
+  "forbidden_offers": [
+   "discount",
+   "waiver",
+   "instalment plan",
+   "any term not in the brief"
+  ],
+  "source": "p1"
+ },
+ "tools_server": "https://freya-bank-mock.freyavoice.workers.dev/v1",
+ "tools": {
+  "verify_identity": {
+   "summary": "Check one security answer. Three wrong answers in total end the check.",
+   "method": "POST",
+   "path": "/verify_identity",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "field": {
+     "type": "string",
+     "enum": [
+      "date_of_birth",
+      "postcode"
+     ],
+     "required": true
+    },
+    "answer": {
+     "type": "string",
+     "description": "For date_of_birth: the date as YYYY-MM-DD. Callers say dates in words, the agent converts. An unreadable value is rejected with ok=false and is not counted as a wrong answer. For postcode: four digits.",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "verified": {
+     "type": "boolean",
+     "required": false
+    },
+    "wrong_answers_left": {
+     "type": "integer",
+     "required": false
+    },
+    "all_verified": {
+     "type": "boolean",
+     "required": false
+    },
+    "hint": {
+     "type": "string",
+     "enum": [
+      "day_month_swapped"
+     ],
+     "required": false
+    }
+   }
+  },
+  "get_account": {
+   "summary": "The late products. Refused until both questions are passed.",
+   "method": "POST",
+   "path": "/get_account",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "products": {
+     "type": "array",
+     "items": {
+      "product_id": {
+       "type": "string",
+       "required": false
+      },
+      "type": {
+       "type": "string",
+       "enum": [
+        "credit_card",
+        "personal_loan",
+        "car_loan"
+       ],
+       "required": false
+      },
+      "card_last4": {
+       "type": "string",
+       "description": "credit cards only",
+       "required": false
+      },
+      "past_due": {
+       "type": "number",
+       "required": false
+      },
+      "days_late": {
+       "type": "integer",
+       "required": false
+      },
+      "minimum_payment": {
+       "type": "number",
+       "description": "credit cards only",
+       "required": false
+      },
+      "instalment_amount": {
+       "type": "number",
+       "description": "loans only",
+       "required": false
+      }
+     },
+     "required": false
+    }
+   }
+  },
+  "create_promise": {
+   "summary": "Record a payment promise. One per product.",
+   "method": "POST",
+   "path": "/create_promise",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "product_id": {
+     "type": "string",
+     "required": true
+    },
+    "amount": {
+     "type": "number",
+     "required": true
+    },
+    "date": {
+     "type": "string",
+     "format": "date",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "promise_id": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "add_note": {
+   "summary": "Brief B: record why a product ended without a promise.",
+   "method": "POST",
+   "path": "/add_note",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "product_id": {
+     "type": "string",
+     "required": true
+    },
+    "reason": {
+     "type": "string",
+     "enum": [
+      "refused",
+      "hardship",
+      "dispute",
+      "paid",
+      "service_error"
+     ],
+     "required": true
+    },
+    "text": {
+     "type": "string",
+     "required": false
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "schedule_callback": {
+   "summary": "Book a callback.",
+   "method": "POST",
+   "path": "/schedule_callback",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "date": {
+     "type": "string",
+     "format": "date",
+     "required": true
+    },
+    "time": {
+     "type": "string",
+     "description": "HH:MM",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "transfer_to_agent": {
+   "summary": "Hand the call to a person.",
+   "method": "POST",
+   "path": "/transfer_to_agent",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "queue": {
+     "type": "string",
+     "enum": [
+      "restructuring",
+      "general",
+      "support"
+     ],
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "close_call": {
+   "summary": "End the call. Always the last tool call. Nothing is accepted after it.",
+   "method": "POST",
+   "path": "/close_call",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "outcome": {
+     "type": "string",
+     "enum": [
+      "promise",
+      "paid",
+      "transferred",
+      "no_promise",
+      "not_verified",
+      "not_reached"
+     ],
+     "required": true
+    },
+    "reason": {
+     "type": "string",
+     "description": "Required for every outcome except promise and paid. See the table in the brief.",
+     "required": false
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  }
+ },
+ "extra_rules": [
+  {
+   "source": "p2",
+   "text": "In the severe band (31 to 60 days late), persuasion attempt 1 and attempt 2 are the same as in the late band."
+  },
+  {
+   "source": "7",
+   "text": "After a recorded promise, say: \"You will receive a text message and an email confirming this promise.\""
+  },
+  {
+   "source": "1",
+   "text": "get_account returns one or two products; the Brief B multi-product rules apply to them, with \"three\" read as \"two\"."
+  },
+  {
+   "source": "1",
+   "text": "get_account returns one or two products; Brief B's multi-product rules apply to them, with every \"three\" in Brief B read as \"two\"."
+  },
+  {
+   "source": "1",
+   "text": "get_account returns one or two products; the Brief B multi-product rules apply to them, with any \"three\" in Brief B read as \"two\"."
+  },
+  {
+   "source": "2",
+   "text": "The second security question is the postcode of the registered address; send it to verify_identity with field postcode as exactly four digits."
+  },
+  {
+   "source": "3",
+   "text": "Four wrong security answers in total, on whichever question, end the identity check; after the fourth, do not state the debt, tell the customer to use the mobile app or a branch, and close as not_verified / failed."
+  },
+  {
+   "source": "4",
+   "text": "A callback must be for today or the next business day, from 09:00 to 18:00 both included, and later than now; outside that window ask once for another time, then close as not_reached / no_callback."
+  },
+  {
+   "source": "8",
+   "text": "If the person says the customer has died, say \"I am so sorry for your loss.\", ask nothing else, and close as not_reached / deceased."
+  },
+  {
+   "source": "p1",
+   "text": "If the customer asks a question before confirming who they are, answer it first; the identity ask that follows is the second ask."
+  },
+  {
+   "source": "p1",
+   "text": "If asked whether you are a robot or an AI, say you are Freya Bank's digital assistant and continue."
+  },
+  {
+   "source": "p1",
+   "text": "A relative may not answer the security questions and may not be told anything about the account, even if they offer to pay."
+  },
+  {
+   "source": "p1",
+   "text": "Send a date of birth to verify_identity as YYYY-MM-DD whatever way the customer said it; a date given only as numbers is read as day, then month, then year."
+  },
+  {
+   "source": "p1",
+   "text": "A no to paying today with no date and no amount is a flat refusal; a date or amount the customer proposes is never a refusal."
+  },
+  {
+   "source": "p1",
+   "text": "Never offer a discount, a waiver, an instalment plan or any term that is not in the brief."
+  },
+  {
+   "source": "p1",
+   "text": "A recorded promise cannot be changed or cancelled in the same call; if asked, say they can change it in the mobile app."
+  },
+  {
+   "source": "p1",
+   "text": "Thank the customer and say goodbye before close_call."
+  }
+ ],
+ "rule_coverage": {
+  "p1": "context: synthetic data note; Brief A/B applicability reflected in opening, third_party, identity, debt_statement, dates, amounts, persuasion, confirmation, intents, closing, extra_rules[p1]; open_questions[Brief A text], open_questions[Brief B text]",
+  "1": "multi_product.applies; multi_product.max_products; multi_product.brief_b_three_read_as_two; meta.multi_product; meta.max_products; meta.job; extra_rules[1]",
+  "5": "calendar",
+  "6": "bands",
+  "t1": "bands",
+  "p2": "bands[severe].attempts_same_as_band; extra_rules[p2]",
+  "7": "confirmation.after_recorded_say; extra_rules[7]",
+  "2": "identity.questions; extra_rules[2]",
+  "3": "identity.max_wrong_answers_total; identity.on_failed; extra_rules[3]",
+  "4": "third_party.callback; extra_rules[4]",
+  "8": "third_party.deceased; extra_rules[8]"
+ },
+ "parser": {
+  "degraded": false,
+  "briefs": [
+   {
+    "file": "brief-e.md",
+    "tag": null
+   }
+  ],
+  "models": [
+   "claude-opus-5-5"
+  ],
+  "seconds": 79,
+  "unresolved_errors": [],
+  "warnings": [
+   "rule_coverage[p1] = 'Brief A/B applicability reflected in opening, third_party, identity, debt_statement, dates, amounts, persuasion, confirmation, intents, closing, extra_rules[p1]' is prose, not a spec path; treated as context"
+  ],
+  "open_questions": [
+   "Brief E says every rule of Briefs A and B applies unless replaced, but the Brief A and Brief B texts are not among the brief units; dates, amounts (floors per product type), persuasion (first question, attempts, exhaustion outcome) and the remaining confirmation fields cannot be filled from the given units and are left null.",
+   "Floor per product type (credit_card, personal_loan, car_loan) is not stated in Brief E; it comes from Brief A rule 25, which is not provided.",
+   "Persuasion attempt definitions for the late band (which the severe band copies) come from Brief A rule 30, which is not provided.",
+   "Confirmation read-back, confirm question, create_promise tries and failure outcome come from Brief A rules 34-37, which are not provided; only rule 38's sentence is replaced by Brief E rule 7.",
+   "Brief E says every rule of Brief A and Brief B applies unless replaced, but neither brief's text is among the given units. The customer intents are therefore null: already paid, dispute, restructuring, human, hardship, scam, unknown question and refusal to talk.",
+   "The Brief B multi-product details are not in the given units and are left null: stating all products first, asking about all for today, per-product bands, single confirmation, when notes are written, and the closing rule.",
+   "The close_call reason table is not in the given units. The tool API says reasons are required for every outcome except promise and paid and points to the brief's table, so the reasons for transferred, no_promise, not_verified and not_reached are null. Candidate values from the API are the queues (restructuring, general, support) and the add_note reasons, but neither is a confirmed close reason.",
+   "The goodbye before close, the transfer-after-promise rule and the forbidden offers come from Brief A and are not in the given units, so they are null.",
+   "Brief A and Brief B files should be supplied together with brief-e.md so that the full rule set can be parsed.",
+   "Brief E says every rule of Brief A and Brief B applies, but their text was not among the given units; opening, third-party, identity-flow and debt-statement values not changed by Brief E were taken from the public Brief A text (worked example) and have no citable unit id in this brief.",
+   "Brief B text is not provided; any Brief B wording for stating several products (e.g. state all products first) is not captured here and should be checked in the multi_product section.",
+   "Brief B's original product count limit is unknown; max_products set to 2 per unit 1 (\"three\" read as \"two\").",
+   "Brief E says Brief B applies with 'three' read as 'two', but the Brief B text is not in the given units; multi_product details (state_all_products_first, ask_all_today_first, per_product_band_and_attempts, single_date_after_deadline, single_confirmation_for_all, dispute_or_paid_continues, no_notes_on_transfer) and the multi-product closing rule are unknown and left null.",
+   "Brief E says every Brief A rule applies unless replaced, but the Brief A text is not in the given units; unchanged Brief A rules (dates, amounts, persuasion, confirmation, intents, closing) were carried from the public Brief A and cited to unit p1. Confirm they match the Brief A version the bank meant."
+  ]
+ }
+}
