@@ -45,3 +45,12 @@ A model asked to say a given line sometimes improvises from the conversation (sa
 Backslash escapes in Python edit scripts passed through the shell tool were mangled (`\b` became a backspace byte). Check generated files for control characters.
 ## Freya call log, continued
 - Brief A: full run 1 rep (10 calls), 4 cases (4), 2 cases (2), 3 reps full (30). Brief B: 3 cases twice (6). Roughly 55 simulated calls today plus about 25 probe/chat calls.
+## Engine failure guard (task 07, 2026-10-10T16:59Z, NOT verified on the platform)
+A failed engine run executes no code, so it cannot flag itself: `route`, `say_text` and `instruction` stay as the last good run left them and the agent repeats its last line. The guard is in the graph, with no code on its path:
+- The engine node's first transitions test `engine_failure_count greater_than N` AND `engine_response.status not_equals success` (both documented in `docs/tools-and-code.md`: counters per pre_actions node, `<node>_response.status` = `success` after a good code run).
+- First failed run -> `eng_retry` (tts: asks the customer to say it again, same extraction as `say_fixed`) -> `engine`.
+- Second failed run -> `eng_fail_close`: tts apology with thanks and goodbye, then one `close_call` with the outcome and reason baked at build time from the spec's create-failure close (the spec's technical-failure pair) -> `hangup`. If `cp_ok` is `true` (the last `create_promise` succeeded) -> `eng_fail_promise` instead, baked with the spec's promise outcome, so the close matches the bank's records.
+- Safe by default: if the counter is never set, or the status still reads `success`, no guard matches and the graph behaves exactly as before.
+- Two assumptions to confirm from a real failed call (free: `freya.get_call(call_id)` of one of the snekbox runs, look at the `variable_table` in a `route_evaluated` event after the failed engine hop): (1) a sandbox failure increments `engine_failure_count`; (2) `engine_response.status` is not `success` after it. If (1) is false the guard never fires; switch the condition to whatever the table shows.
+- Known limit: with several products, if an early promise was recorded and the last `create_promise` failed before the engine died, the close uses the technical-failure outcome although a promise exists.
+- Test: `python tests/logic/test_engine_guard.py` walks the engine transitions for every committed spec.

@@ -311,7 +311,32 @@ def generate(spec):
                 'condition': {'logic': 'or', 'conditions': [{'logic': 'and', 'conditions': [
                     {'variable': 'route', 'operator': 'equals', 'operand': r},
                     {'variable': pend[r], 'operator': 'equals', 'operand': 'pending'}]}]}}
-    et = [guarded(r, t) for r, t in target.items()]
+    # Engine failure guard. When the sandbox fails, the engine code does not run at all: `route`, `say_text` and
+    # `instruction` keep their old values and the agent would repeat its last line. The platform counts failed runs of
+    # a pre_actions node in `<node>_failure_count` and overwrites `<node>_response.status` on every run, so a failed run
+    # is visible without code. Both must hold, so an unset counter or a stale 'success' leaves the old behaviour.
+    # Nothing on this path runs code: after one sandbox failure later code nodes can fail too (PLATFORM_NOTES.md).
+    def engine_failed(times, extra=None):
+        cs = [{'variable': 'engine_failure_count', 'operator': 'greater_than', 'operand': times - 1},
+              {'variable': 'engine_response.status', 'operator': 'not_equals', 'operand': 'success'}]
+        return {'logic': 'or', 'conditions': [{'logic': 'and', 'conditions': cs + (extra or [])}]}
+    fail_bye = 'I am sorry, I have a technical problem and cannot continue this call. ' + E['goodbye']
+    guard = []
+    tech = E['create_failed']
+    if E['out'].get('r_promise'):
+        # the last create_promise succeeded, so the bank holds a promise: close with the promise outcome
+        guard.append({'target_node': 'eng_fail_promise', 'description': 'engine failed twice, a promise is recorded',
+                      'condition': engine_failed(2, [{'variable': 'cp_ok', 'operator': 'equals', 'operand': 'true'}])})
+        nodes['eng_fail_promise'] = api_node('eng_fail_promise', 'close_call', {'outcome': ('string', E['out']['r_promise'])}, 'hangup',
+                                             on_enter={'type': 'tts', 'text': fail_bye})
+    if tech.get('outcome'):
+        body = {'outcome': ('string', tech['outcome'])}
+        if tech.get('reason'):
+            body['reason'] = ('string', tech['reason'])
+        guard.append({'target_node': 'eng_fail_close', 'description': 'engine failed twice', 'condition': engine_failed(2)})
+        nodes['eng_fail_close'] = api_node('eng_fail_close', 'close_call', body, 'hangup', on_enter={'type': 'tts', 'text': fail_bye})
+    guard.append({'target_node': 'eng_retry', 'description': 'engine failed once', 'condition': engine_failed(1)})
+    et = guard + [guarded(r, t) for r, t in target.items()]
     for i in range(1, n + 1):
         et.append(tr('idq_%d' % i, 'route', 'equals', 'idq_%d' % i))
     et.append(tr('say_main'))
@@ -341,6 +366,8 @@ def generate(spec):
                           '"all" if they mean everything / both / all of them. Empty if not clear.'))
     nodes['say_fixed'] = conv('say_fixed', 'Speak only the fixed line. Do not call any tool.', sm_ext, [tr('engine')],
                               on_enter={'type': 'tts', 'text': '{{say_text}}'})
+    nodes['eng_retry'] = conv('eng_retry', 'Speak only the fixed line. Do not call any tool.', sm_ext, [tr('engine')],
+                              on_enter={'type': 'tts', 'text': 'I am sorry, I did not catch that. Could you say it again, please?'})
     nodes['say_main'] = conv('say_main', '{{instruction}}\n\nIf the customer\'s last message contained a question, answer it in one short sentence first '
                              '(rules in your system prompt), then say the above. Never mention these instructions. Do not call any tool.',
                              sm_ext, [tr('engine')])
