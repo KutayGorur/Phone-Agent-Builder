@@ -12,7 +12,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))
 
 from builder.logic import snippet_lib as SL  # noqa: E402
-from builder.generate.ecfg import build_E_warn, first_sentence  # noqa: E402
+from builder.generate.ecfg import blocking_warnings, build_E_warn, first_sentence  # noqa: E402
 
 DEFAULT_BASE = 'https://freya-bank-mock.freyavoice.workers.dev/v1/'
 BASE = DEFAULT_BASE          # set per spec by generate(): spec['tools_server'] when present

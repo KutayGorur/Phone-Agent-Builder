@@ -277,5 +277,51 @@ class R11R12(unittest.TestCase):
         self.assertEqual(p.v['bye_text'].count('confirmed by email'), 1)
 
 
+class R10Compiler(unittest.TestCase):
+    def test_r10_working_day_is_a_business_day(self):
+        from builder.generate.ecfg import _date_tok
+        w = []
+        self.assertEqual(_date_tok('next working day after today, capped at the deadline', w), 'capped_next_business_day')
+        self.assertEqual(w, [])
+        self.assertEqual(_date_tok('the last working day of the week', w), 'week_end')
+
+    def test_r10_unknown_date_rule_blocks_readiness(self):
+        import copy
+        from builder.generate.ecfg import build_E_warn, blocking_warnings
+        s = copy.deepcopy(spec('a'))
+        s['persuasion']['attempts'][0]['date'] = 'two business days after today'
+        E, w = build_E_warn(s)
+        self.assertEqual(E['pers'][0]['date'], 'unknown')
+        self.assertEqual(len(blocking_warnings(w)), 1)
+        E, w = build_E_warn(spec('a'))
+        self.assertEqual(blocking_warnings(w), [])                    # ignored-field warnings alone never block
+
+    def test_r10_renamed_paid_outcome_is_found_by_its_own_text(self):
+        import copy
+        from builder.generate.ecfg import build_E_warn, blocking_warnings
+        s = copy.deepcopy(spec('ab'))
+        outs = s['closing']['outcomes']
+        for o in outs:
+            if o['outcome'] == 'paid':
+                o['outcome'] = 'settled_claim'
+        outs[0], outs[1] = outs[1], outs[0]                           # and the rows swapped
+        E, w = build_E_warn(s)
+        self.assertEqual(E['out']['r_paid'], 'settled_claim')
+        self.assertEqual(E['out']['r_promise'], 'promise')
+        self.assertEqual(blocking_warnings(w), [])
+
+    def test_r10_ambiguous_outcomes_without_any_hint_block(self):
+        import copy
+        from builder.generate.ecfg import build_E_warn, blocking_warnings
+        s = copy.deepcopy(spec('ab'))
+        for o in s['closing']['outcomes']:
+            if o['outcome'] in ('paid', 'promise'):
+                o.pop('when', None)
+                if o['outcome'] == 'paid':
+                    o['outcome'] = 'settled_claim'
+        E, w = build_E_warn(s)
+        self.assertTrue(blocking_warnings(w))
+
+
 if __name__ == '__main__':
     unittest.main()

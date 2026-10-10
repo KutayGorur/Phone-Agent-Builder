@@ -218,6 +218,21 @@ def main(argv=None):
             t.error(f"generate failed: {e!r}; falling back to examples/base-agent.json")
             workflow, status = json.loads(FALLBACK_WORKFLOW.read_text(encoding="utf-8")), "degraded"
 
+        # compiler diagnostics: guessed meanings make the build degraded, the rest is only logged
+        gm = sys.modules.get("builder.generate.generate")      # the package attribute `generate` is the function
+        lw, bw = getattr(gm, "LAST_WARNINGS", None), getattr(gm, "blocking_warnings", None)
+        if lw is not None and bw is not None:
+            blocking = bw(lw)
+            for w in lw:
+                if w not in blocking and not w.startswith("spec field"):
+                    t.note("compiler warning: " + w)
+            n_ign = sum(1 for w in lw if w.startswith("spec field"))
+            if n_ign:
+                t.note(f"compiler: {n_ign} spec field(s) are not read by the compiler (see generate.LAST_WARNINGS)")
+            if blocking:
+                status = "degraded"
+                t.error("compiler guessed a meaning, build will be labelled degraded: " + "; ".join(blocking))
+
         if a.dry_run:
             out_path = str(out_dir / f"{stem}.workflow.json")
             pathlib.Path(out_path).write_text(json.dumps({"workflow": workflow}, indent=1, ensure_ascii=False), encoding="utf-8")

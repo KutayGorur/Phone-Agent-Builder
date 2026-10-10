@@ -62,11 +62,11 @@ def _date_tok(t, warn=None, where='persuasion attempt'):
     key = re.sub(r'[\s\-]+', '_', raw.lower())
     if key in DATE_TOKENS:
         return key
-    low = raw.lower()
+    low = re.sub(r'\bwork(?:ing)?[ -]?days?\b', 'business day', raw.lower())      # "working day" is the business day
     tok = None
     if re.match(r'^(the )?(deadline|latest promise date)\.?$', low):
         tok = 'deadline'
-    elif 'midpoint' in low or 'index ceiling' in low or re.search(r'ceil\w*\s*\(', low) or re.search(r'half\w*\s+(of|way|to)', low):
+    elif 'midpoint' in low or 'index ceiling' in low or re.search(r'ceil\w*\s*\(', low) or re.search(r'half\w*\s+(of|way|to)\b', low):
         tok = 'midpoint'
     elif 'last business day' in low and 'week' in low:
         tok = 'week_end'
@@ -182,6 +182,11 @@ def _build(spec, warns_out):
     if not paid_o:
         po = find(lambda o: not o.get('reasons') and _s(o.get('outcome')).lower() == _s(paid_reason).lower())
         paid_o = po.get('outcome') if po else None
+    if not paid_o:                                                   # a reason-less outcome whose own text says every product is paid
+        pw = [o for o in empties if re.search(r'\bpaid\b|\b%s\b' % re.escape(_s(paid_reason).lower()), wh(o))
+              and not re.search(r'\bpromise (was|is) recorded|at least one promise|any promise', wh(o))]
+        if len(pw) == 1:
+            paid_o = pw[0].get('outcome')
     # promise: the other reason-less outcome; `when` text only breaks a tie, with a warning
     cands = [o for o in empties if o.get('outcome') != paid_o]
     if len(cands) == 1:
@@ -314,6 +319,16 @@ def _ack_scope(conf, warns):
         warns.append('confirmation.acknowledgement_scope %r is not one of %s: using per_call' % (v, '|'.join(ACK_SCOPES)))
         return 'per_call'
     return v
+
+
+# Warnings that mean the compiler substituted a guess for a mandatory meaning (as opposed to a field it ignores or a
+# harmless fallback). The build labels such a spec degraded.
+BLOCKING_MARKS = ('is not a known date rule', 'could be the promise outcome', 'no outcome without reasons',
+                  'is mapped to two roles', 'taken from the text of "when"')
+
+
+def blocking_warnings(warns):
+    return [w for w in warns if any(m in w for m in BLOCKING_MARKS)]
 
 
 def build_E_warn(spec):
