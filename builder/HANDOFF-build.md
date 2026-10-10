@@ -11,3 +11,8 @@ Verified once end to end with stub parse/generate (brief-a, example agent create
 **Next steps:** run `python builder/build.py briefs/brief-a.md tools/openapi.json` again with the real stages; then try `--selftest --selftest-brief A`; check total time stays under 27 min.
 
 **Gotchas:** last brief file names the Freya slot and `out/<stem>.workflow.json`; state is in `.freya-agents.json` (uncommitted, has a `brief-a` slot from my test run); fallback to `examples/base-agent.json` marks the trace `status=degraded`; Windows Git Bash heredocs with long scripts broke, use the Write tool.
+
+## Update (resumed 10 Oct, credit rules)
+- Real parse/generate are wired (imported from builder.parse / builder.generate). `--spec-file` skips parse, `--dry-run` makes no Freya calls.
+- Self-test is frugal: off by default; when on, 4 customers (one per family), 1 fix round. Plumbing verified with a fake run_cases (`--run-cases-cmd`), no real simulation was run.
+- Still not run: a real `--selftest` against Freya or the mock bank (needs tunnel, see harness/README.md).

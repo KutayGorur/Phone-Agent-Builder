@@ -55,11 +55,26 @@ def parse_results(text):
     return ((int(m.group(1)), int(m.group(2))) if m else None), failed
 
 
-def run_selftest(agent_id, brief, timeout_s, t, label):
+def pick_cases(cases_file, brief, limit):
+    """Frugal default: one customer per family (hardest level first), at most `limit`. Every simulated call costs credits."""
+    cases = [c for c in json.loads(pathlib.Path(cases_file).read_text(encoding="utf-8")) if not brief or c.get("brief") == brief]
+    rank = {"hard": 0, "medium": 1, "easy": 2}
+    seen, picked = set(), []
+    for c in sorted(cases, key=lambda c: rank.get(c.get("level"), 3)):
+        if c.get("family") not in seen:
+            seen.add(c.get("family")); picked.append(c["id"])
+    return picked[:limit] if limit else [c["id"] for c in cases]
+
+
+def run_selftest(agent_id, brief, timeout_s, t, label, cases_file=None, only=None, runner=None):
     out_file = ROOT / "results" / f"selftest-{label}.json"
-    cmd = [sys.executable, str(ROOT / "tools" / "run_cases.py"), agent_id, "--out", str(out_file)]
+    cmd = [sys.executable, str(runner or ROOT / "tools" / "run_cases.py"), agent_id, "--out", str(out_file)]
     if brief:
         cmd += ["--brief", brief]
+    if cases_file:
+        cmd += ["--cases", str(cases_file)]
+    if only:
+        cmd += ["--only", ",".join(only)]
     t.selftest(f"run_cases start: {' '.join(cmd[2:])} (timeout {timeout_s:.0f}s)")
     try:
         p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_s)
@@ -83,7 +98,13 @@ def main(argv=None):
     ap.add_argument("--budget-min", type=float, default=27, help="soft budget in minutes (hard cap is 30)")
     ap.add_argument("--selftest", action="store_true", help="run practice customers on the built agent and try fixes")
     ap.add_argument("--selftest-brief", default=None, help="run_cases --brief value (A or B); default all practice cases")
-    ap.add_argument("--max-fix-rounds", type=int, default=2)
+    ap.add_argument("--selftest-cases", default=str(ROOT / "public-test-set.json"), help="case file for the self-test")
+    ap.add_argument("--selftest-max", type=int, default=4, help="max customers per self-test run (0 = all); each costs Freya credits")
+    ap.add_argument("--selftest-only", default=None, help="comma-separated case ids (overrides the automatic pick)")
+    ap.add_argument("--max-fix-rounds", type=int, default=1)
+    ap.add_argument("--spec-file", default=None, help="development: skip parse and use this spec.json")
+    ap.add_argument("--dry-run", action="store_true", help="parse + generate only; no Freya calls, no credits; writes out/<stem>.workflow.json")
+    ap.add_argument("--run-cases-cmd", default=None, help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
     if len(a.files) < 2:
         ap.error("need at least one brief and the tool API file")
@@ -98,8 +119,12 @@ def main(argv=None):
     status, workflow_id, out_path = "failed", None, None
     try:
         t.stage("parse")
-        parse = _load("parse", "parse") or stub_parse
-        spec = _run_limited(parse, (briefs, tool_api), left() * 0.35, "parse")
+        if a.spec_file:
+            spec = json.loads(pathlib.Path(a.spec_file).read_text(encoding="utf-8"))
+            t.note(f"parse skipped: spec loaded from {a.spec_file}")
+        else:
+            parse = _load("parse", "parse") or stub_parse
+            spec = _run_limited(parse, (briefs, tool_api), left() * 0.35, "parse")
         out_dir = pathlib.Path(a.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / f"{stem}.spec.json").write_text(json.dumps(spec, indent=1, ensure_ascii=False), encoding="utf-8")
         t.note(f"spec written to {out_dir / (stem + '.spec.json')}")
@@ -113,6 +138,14 @@ def main(argv=None):
             t.error(f"generate failed: {e!r}; falling back to examples/base-agent.json")
             workflow, status = json.loads(FALLBACK_WORKFLOW.read_text(encoding="utf-8")), "degraded"
 
+        if a.dry_run:
+            out_path = str(out_dir / f"{stem}.workflow.json")
+            pathlib.Path(out_path).write_text(json.dumps({"workflow": workflow}, indent=1, ensure_ascii=False), encoding="utf-8")
+            t.note(f"dry run: no Freya calls; workflow written to {out_path}")
+            if a.selftest:
+                t.selftest(f"dry run: would run run_cases on {','.join(pick_cases(a.selftest_cases, a.selftest_brief, a.selftest_max))}")
+            status = status if status == "degraded" else "ok"
+            return 0
         import freya
         t.stage("freya save")
         try:
@@ -131,17 +164,18 @@ def main(argv=None):
 
         if a.selftest:
             fix = _load("fix", "fix")
+            only = a.selftest_only.split(",") if a.selftest_only else pick_cases(a.selftest_cases, a.selftest_brief, a.selftest_max)
             for rnd in range(a.max_fix_rounds + 1):
-                if left() < 14 * 60:   # a full practice run can take 11 minutes
+                if left() < 8 * 60:   # a small practice run takes a few minutes
                     t.selftest(f"skipped round {rnd}: only {left():.0f}s left in budget"); break
-                res, failed = run_selftest(agent_id, a.selftest_brief, left() - 120, t, f"{stem}-{rnd}")
+                res, failed = run_selftest(agent_id, a.selftest_brief, left() - 120, t, f"{stem}-{rnd}", a.selftest_cases, only, a.run_cases_cmd)
                 if res is None or not failed or rnd == a.max_fix_rounds:
                     break
                 if fix is None:
                     t.selftest("no fixer available (builder.fix.fix), stopping loop"); break
                 t.stage(f"fix round {rnd + 1}")
                 try:
-                    workflow = _run_limited(fix, (spec, workflow, failed), max(left() - 14 * 60, 60), "fix")
+                    workflow = _run_limited(fix, (spec, workflow, failed), max(left() - 8 * 60, 60), "fix")
                     freya.validate_workflow(f"{stem} dryrun", workflow)
                     info = freya.save_workflow(stem, workflow, state_file=STATE_FILE)
                     t.freya("workflow updated", workflow_id=workflow_id, version=info.get("version"))
