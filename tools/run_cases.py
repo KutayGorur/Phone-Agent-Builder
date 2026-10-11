@@ -49,7 +49,11 @@ def persona_for(case, ident, style=None):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("agent_id"); ap.add_argument("--brief"); ap.add_argument("--cases", default=str(ROOT / "public-test-set.json")); ap.add_argument("--out"); ap.add_argument("--only"); ap.add_argument("--reps", type=int, default=1); ap.add_argument("--style", choices=sorted(STYLES)); ap.add_argument("--rerun-if-slow", type=int, default=0)
     a = ap.parse_args()
+    if a.reps < 1:
+        ap.error('--reps must be at least 1')
     cases = [c for c in json.load(open(a.cases)) if (not a.brief or c["brief"] == a.brief) and (not a.only or c["id"] in a.only.split(","))]
+    if not cases:
+        ap.error('no test cases selected; check --brief and --only')
     ident = {c["id"]: {"identity": c["identity"]} for c in cases}
     store = ROOT / ".personas.json"; ids = json.load(open(store)) if store.exists() else {}
     # a persona is recreated whenever its text changes, so an edited case never runs with a stale customer
@@ -80,6 +84,7 @@ def main():
     if a.out:
         pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         json.dump({"agent_id": a.agent_id, "simulation_id": sim_id, "iteration_id": it_id, "seconds": round(total_s), "passed": n, "total": len(final), "runs": a.reps, "final": final, "rows": reps[-1], "all_rows": reps}, open(a.out, "w"), indent=1)
+    return 0 if n == len(final) else 1
 
 def call_waits(call):
     """Measure customer-visible silence, including a final unanswered turn.
@@ -145,4 +150,4 @@ def run_once(agent_id, cases, ids):
         if med > 10: print("WARNING: latency exceeds the 10-second gate. Investigate platform delays and missing dispatch before robustness runs.")
     return rows, sim_id, it_id, status, took, (med if waits else 0)
 
-if __name__ == "__main__": main()
+if __name__ == "__main__": sys.exit(main())
