@@ -230,13 +230,92 @@ def lint(wf, briefs=(), spec=None):
     return F
 
 
+TOOLS = ("verify_identity", "verify_date_of_birth", "verify_phone_last4", "get_account", "create_promise", "add_note", "schedule_callback", "transfer_to_agent", "close_call")
+MONEY = re.compile(r"[£$€]\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?(?:pounds|dollars|euros)\b", re.I)
+
+
+def call_turns(call):
+    """[(index, role, text, tools)] from a Freya call object (messages with role/content/tool calls); tolerant of key names."""
+    out = []
+    for i, m in enumerate(call.get("messages") or []):
+        role = m.get("role") or ""
+        text = next((m[k] for k in ("content", "text", "message", "transcript") if isinstance(m.get(k), str)), "")
+        blob = json.dumps({k: v for k, v in m.items() if k not in ("content", "text", "message", "transcript")})
+        tools = [t for t in TOOLS if t in blob]
+        out.append((i, role, text, tools))
+    return out
+
+
+def lint_call(call, briefs=(), label=""):
+    """Wording checks over what the agent actually said in one real call. Same rules as the workflow lint plus transcript-only ones."""
+    F = []
+
+    def add(sev, rule, i, text, why):
+        F.append({"sev": sev, "rule": rule, "node": f"{label}#{i}", "text": text[:220], "why": why})
+
+    brief_text = "\n".join(briefs)
+    forb = {norm(m) for m in FORBID_Q.findall(brief_text) if " " in m.strip()}
+    turns = call_turns(call)
+    verified, promised, seen_say, offers = False, False, {}, []
+    for i, role, text, tools in turns:
+        if "verify" in " ".join(tools) and "get_account" not in tools:
+            pass
+        if "get_account" in tools:
+            verified = True
+        if "create_promise" in tools:
+            promised = True
+        if role != "assistant" or not text:
+            continue
+        for sent in sentences(text):
+            n = norm(sent)
+            if BUDGET.search(sent):
+                add("ERROR", "W1", i, sent, "asks the customer's budget")
+            for f in forb:
+                if f and f in n:
+                    add("ERROR", "W1", i, sent, f"brief forbids: {f!r}")
+            if not verified and DISCLOSE.search(sent) and not NEG.search(sent):
+                add("ERROR", "W2", i, sent, "debt/product wording before get_account (identity not yet verified)")
+            if PROMISE.search(sent) and not NEG.search(sent):
+                add("WARN", "W3", i, sent, "possible term outside the brief")
+            if re.search(r"\brecorded\b|\ball set\b", sent, re.I) and not promised and not re.search(r"call is recorded|recording", sent, re.I):
+                add("ERROR", "W4", i, sent, "claims a record before create_promise ran")
+            if len(n.split()) >= 5:
+                seen_say.setdefault(n, []).append(i)
+            for amt in MONEY.findall(sent):
+                if re.search(r"minimum|instalment|at least|lowest|floor|could you do|can you do|how about", sent, re.I):
+                    offers.append((i, amt.strip(), sent))
+    for n, idx in seen_say.items():
+        if len(idx) >= 2:
+            add("WARN", "W5", idx[1], n, f"agent said the same sentence {len(idx)}x (turns {idx})")
+    by_amt = {}
+    for i, amt, sent in offers:
+        by_amt.setdefault(norm(amt), []).append((i, sent))
+    for amt, lst in by_amt.items():
+        if len(lst) >= 2:
+            add("WARN", "T1", lst[1][0], lst[1][1], f"amount {amt!r} offered/named {len(lst)}x as a floor-type offer (turns {[i for i, _ in lst]}); a judge may count a second offer")
+    return F
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("workflow")
+    ap.add_argument("workflow", help="workflow JSON, or with --calls a call JSON / folder of call JSON files (a results/run.json lists call_ids, fetch each with freya.get_call and save)")
+    ap.add_argument("--calls", action="store_true")
     ap.add_argument("--brief", action="append", default=[])
     ap.add_argument("--spec")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
+    if a.calls:
+        files = sorted(Path(a.workflow).glob("*.json")) if Path(a.workflow).is_dir() else [Path(a.workflow)]
+        bad = 0
+        for fp in files:
+            c = json.loads(fp.read_text(encoding="utf-8-sig"))
+            c = c.get("call", c)
+            F = lint_call(c, [Path(b).read_text(encoding="utf-8-sig") for b in a.brief], fp.stem)
+            for f in F:
+                print(f"{f['sev']:5} {f['rule']} [{f['node']}] {f['why']}\n        {f['text']}")
+            bad += any(f["sev"] == "ERROR" for f in F)
+        print(f"{len(files)} calls, {bad} with errors")
+        return 1 if bad else 0
     wf = json.loads(Path(a.workflow).read_text(encoding="utf-8-sig"))
     briefs = [Path(b).read_text(encoding="utf-8-sig") for b in a.brief]
     spec = json.loads(Path(a.spec).read_text(encoding="utf-8-sig")) if a.spec else None
