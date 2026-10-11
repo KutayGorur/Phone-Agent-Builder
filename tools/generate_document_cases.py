@@ -13,6 +13,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('scenarios')
     parser.add_argument('--out',required=True)
+    parser.add_argument('--spec',help='source-derived specification for exact API dispatch assertions')
     args=parser.parse_args()
     instructions=(
         'Convert ALL public example conversations in the input into test cases. Return JSON {cases:[{id,variables,persona:{name,prompt,successCriteria,tags},tool_checks:[]}]}. '
@@ -22,9 +23,13 @@ def main():
         'The caller must wait for the agent to finish explaining and ask each subsequent source-specified question; it must not invent facts. '
         'successCriteria must list ALL expected behavior in that scenario, including exact monetary values and dates when available, consent before writes, no false success, privacy and terminal behavior. '
         'Do not weaken criteria or treat a safety failure as a pass. Judge amounts/dates semantically in spoken words rather than exact digit spelling. '
-        'Do not require punctuation or exact paraphrase except source-mandated utterances. Only put tool_checks when exact endpoint paths are explicitly given in input; otherwise leave empty. '
+        'Do not require punctuation or exact paraphrase except source-mandated utterances. When a specification is supplied, derive tool_checks from its exact service paths and scenario: {path,min,max,body_equals:{dot_field:expected_value}}. '
+        'Require each requested write exactly once after explicit consent, forbid other writes, and check source-specified selection values when known. Only put tool_checks when exact endpoint paths are explicitly given in input; otherwise leave empty. '
         'IDs must be stable unique sequential labels EX-01 etc. Return JSON only.')
-    result=extract_json(complete('derive example test personas',instructions,Path(args.scenarios).read_text(encoding='utf-8-sig'),timeout=300))
+    payload={'scenarios':Path(args.scenarios).read_text(encoding='utf-8-sig')}
+    if args.spec:
+        payload['specification']=json.loads(Path(args.spec).read_text(encoding='utf-8-sig'))
+    result=extract_json(complete('derive example test personas',instructions,json.dumps(payload,ensure_ascii=False),timeout=300))
     cases=result['cases']
     if not cases or len({c['id'] for c in cases})!=len(cases):
         raise ValueError('no cases or duplicate IDs')
