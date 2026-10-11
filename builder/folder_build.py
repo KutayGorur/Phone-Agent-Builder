@@ -54,7 +54,11 @@ def platform_compatible_workflow(workflow):
         code="import json\n"+"mapping_rows="+repr(mappings)+"\nresponse_prefix="+repr(name+'_response.')+"\n"+'''def mapped_value(path):
     key=response_prefix+path
     if key in vars:
-        return vars.get(key)
+        value=vars.get(key)
+        if value=='null': return None
+        if value=='true': return True
+        if value=='false': return False
+        return value
     root=dict()
     for flat,value in list(vars.items()):
         if not flat.startswith(key+'.'):
