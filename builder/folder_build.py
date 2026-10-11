@@ -93,6 +93,20 @@ for row in mapping_rows:
             nodes[bridge]['passthrough_default_transition']=node['passthrough_default_transition']
             node['passthrough_default_transition']=bridge
         node['transitions']=[{'target_node':bridge,'condition':{'operator':'always'},'description':'materialize API response mappings'}]
+    internal=[name for collection in ('nodes','global_nodes')
+              for name,node in result.get(collection,{}).items() if node.get('passthrough')]
+    for node in result.get('global_nodes',{}).values():
+        # Routing an automatic step has no new caller utterance. In particular,
+        # an empty internal turn must never count as a caller's silence.
+        node['excluded_nodes']=list(dict.fromkeys((node.get('excluded_nodes') or [])+internal))
+    for collection in ('nodes','global_nodes'):
+        for node in result.get(collection,{}).values():
+            for field in node.get('extraction_schema') or []:
+                values=field.get('enum_values')
+                if field.get('type')=='string' and isinstance(values,list) and '' not in values:
+                    # Generated state machines clear extracted answers before
+                    # asking again. Rejected clears can preserve old consent.
+                    values.append('')
     return result
 
 

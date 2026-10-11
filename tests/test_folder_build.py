@@ -3,6 +3,15 @@ from builder.folder_build import choose_documents, origin, validate_plan, workfl
 
 
 class FolderCompilerTests(unittest.TestCase):
+    def test_internal_steps_cannot_trigger_global_interrupts_and_answers_can_clear(self):
+        original={'nodes':{'compute':{'passthrough':True},'ask':{'extraction_schema':[{'name':'consent','type':'string','enum_values':['yes','no']}] }},'global_nodes':{'silence':{'passthrough':True,'excluded_nodes':['end']},'human':{'passthrough':False}}}
+        result=platform_compatible_workflow(original)
+        self.assertEqual(result['global_nodes']['silence']['excluded_nodes'],['end','compute','silence'])
+        self.assertNotIn('ask',result['global_nodes']['human']['excluded_nodes'])
+        self.assertIn('',result['nodes']['ask']['extraction_schema'][0]['enum_values'])
+        self.assertEqual(result,platform_compatible_workflow(result))
+        self.assertEqual(original['nodes']['ask']['extraction_schema'][0]['enum_values'],['yes','no'])
+
     def test_live_flattened_api_mapping_reconstructs_arrays_and_clears_stale_aliases(self):
         api={'type':'function','function':{'handler':'__function__:api_call'}}
         workflow={'nodes':{'lookup':{'pre_actions':[api],'response_mapping':[{'path':'data.items','variable':'items'},{'path':'data.result.code','variable':'code'}],'transitions':[{'target_node':'next','condition':{'operator':'always'}}]}}}
