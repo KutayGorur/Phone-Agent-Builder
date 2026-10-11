@@ -13,8 +13,8 @@ Rewrote "Reliability" and "Known limits" and the local-scenario count in `README
 `builder/parse/llm.py` `complete()` falls back between backends (API key, `claude` CLI) but not between models. If the default model is refused or at its limit on both, the build ends `status=degraded` with the example agent. Change: after both backends fail on the default model, try once more on a smaller model, and write the fallback into the trace. Add a unit test next to `tests/test_model_failure_status.py`; check with `python3 builder/build.py briefs/brief-a.md tools/openapi.json --dry-run`.
 Done: `FALLBACK_MODEL` (`claude-sonnet-5-5`, env `PARSER_FALLBACK_MODEL`, empty turns it off) in `llm.py`, `tests/test_model_fallback.py`. All tests, parser selftest and local sim pass. Live check: a dry-run build of Brief A with a nonexistent `PARSER_MODEL` fell back on every call and ended `status=ok` in 85 s.
 
-## Bite 3 — pre-flight on this machine — at 16:30 — early pass at 14:19 partly done, dry-run build still open
-Early pass 14:19 UTC: `git pull --rebase` already up to date at `c7cd24d`; all test files pass; parser selftest clean on A and A+B; `local_sim.py` 0 FAIL; `env.sh` exists, ignored, not tracked. Not done: the `--dry-run` build of Brief A (the real Claude login check) and deleting its trace. Repeat the whole bite at 16:30.
+## Bite 3 — pre-flight on this machine — early pass complete; repeat at 16:30 UTC still pending
+Early pass 14:19 UTC: `git pull --rebase` already up to date at `c7cd24d`; all test files pass; parser selftest clean on A and A+B; `local_sim.py` 0 FAIL; `env.sh` exists, ignored, not tracked. Codex completed the missing real Brief A dry-run check starting 14:28 UTC on Kutay's Windows workspace (main 848bca5): exit 0, `[END] status=ok`, 89 seconds, 8 model calls, both parses agree on all 12 critical facts, all 72 generated local scenarios pass. Follow-up gate sweep: all 30 test files pass, parser selftest clean, local_sim 0 FAIL. env.sh is ignored and untracked. No Freya calls or workflow creation. The trace and generated outputs are preserved in the local project parent at preflight-backups/2026-10-11/codex-1428-utc; the trace was moved out of traces/ rather than deleted, following Kutay's backup preference. This verifies the current Windows workspace, not a designation of primary/backup build machine. Repeat the whole bite at 16:30 UTC.
 This machine is the backup build machine. Check: `git pull --rebase origin main`; all tests pass; `python3 builder/generate/local_sim.py` has 0 FAIL; `env.sh` exists and is not tracked; a `--dry-run` build of Brief A ends `status=ok` (proves the Claude login with a real call); delete the trace that dry run writes. Report the result to İnan.
 
 ## Bite 4 — cross-check the hidden briefs — at 17:00, needs the brief files from İnan
@@ -28,3 +28,4 @@ Closing was denied on this machine. PR #9 is superseded by `58c355d`; close it o
 
 ## Not doing today
 Live tests of briefs C to H (tunnel blocked) and the scam-guard test fixture.
+
