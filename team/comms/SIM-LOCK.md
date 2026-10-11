@@ -1,6 +1,6 @@
 # Sim slot lock
 
-Free. codex-flight released the slot after Kutay's unchanged public recovery retry, 2026-10-11. All three simulations completed; API active list empty.
+RESERVED by codex-flight for Kutay's all-case readiness request, 2026-10-11. Separate combined-brief fixture corrects only PUB-05/PUB-08 expected notes under B8-9; unchanged combined v6. Targeted two cases first, then three reps if healthy and time permits. All calls via ci/sim.py --why. Original fixture/raw scores preserved.
 
 CURRENT EXECUTION: RECOVERED IN ONE PASS. A v11 PUB-01 1/1 plus PUB-02..10 9/9 (all ten cases covered once across two simulations). Combined v6 raw 11/13, all 13 conversation checks passed; only known Brief B-required hardship/paid note conflicts with A-derived expected [] fixtures. No stalls or unanswered final turns. A remaining-case median worst reply 5.9 s, maximum 12.4 s; combined median 4.8 s, maximum 8.1 s.
 
