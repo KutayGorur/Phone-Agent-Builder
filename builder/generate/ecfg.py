@@ -6,6 +6,7 @@ import re
 
 from builder.logic.config import config_from_spec
 from builder.generate.sanitize import describe_notes, sanitize_spec
+from builder.generate.guardrails import GUARD_REPLY, scam_answer
 
 DEFAULT_INTENT_DESC = {
     'already_paid': 'says they already paid this past-due amount',
@@ -647,7 +648,8 @@ def _build(spec, warns_out):
         'human': next((k for k, v in intents.items() if v.get('kind') == 'transfer' and v.get('ask_first')), None),
         'unclear': unclear, 'unclear_say': 'I am sorry, I could not confirm who I am speaking with. ' + goodbye,
         'ai_say': opening.get('ai_question_answer') or "I am the bank's digital assistant.",
-        'scam_say': (intents.get('sp_scam') or {}).get('say') or 'they can verify this call with the bank\'s customer service',
+        'scam_say': scam_answer((intents.get('sp_scam') or {}).get('say')),
+        'security_say': GUARD_REPLY,
         'unknown_say': (intents.get('sp_unknown_question') or {}).get('say') or 'I do not have that information',
     }
     E['out_reason'] = out_reason

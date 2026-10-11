@@ -1,5 +1,3 @@
 # Sim slot lock
 
-(currently free)
-
-Last attempt: PUB-05 start returned HTTP 500, follow-up simulation list HTTP 504. No simulation ID received; check recent/running simulations before another start.
+codex-flight | scam/injection guards comprehensive tests | started 2026-10-11T10:45:42Z | expected 20 min

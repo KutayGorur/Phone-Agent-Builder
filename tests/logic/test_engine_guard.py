@@ -69,7 +69,8 @@ class EngineGuard(unittest.TestCase):
             n = wf['nodes']['eng_retry']
             self.assertEqual(n['on_enter']['type'], 'tts')
             self.assertNotIn(STALE['say_text'], n['on_enter']['text'])
-            self.assertEqual([t['target_node'] for t in n['transitions']], ['engine'])
+            self.assertEqual([t['target_node'] for t in n['transitions']], ['security_eng_retry', 'engine'])
+            self.assertEqual(n['transitions'][0]['condition']['variable'], 'x_security')
 
     def test_second_failure_closes_once_without_code(self):
         for name, wf in self.each():

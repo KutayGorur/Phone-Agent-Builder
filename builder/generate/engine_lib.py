@@ -14,6 +14,7 @@ Sandbox rules: no double braces anywhere in this file, nothing raises out of mai
 import json
 import re
 import datetime
+import unicodedata
 
 E = json.loads(__E__)
 CAL = E['cal']
@@ -26,6 +27,39 @@ MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', '
 def S(k):
     v = vars.get(k)
     return '' if v is None else str(v).strip()
+
+
+def instruction_like(text):
+    """Conservative literal tripwire, supplementary to semantic extraction."""
+    text = unicodedata.normalize('NFKC', str(text or ''))
+    text = re.sub('[\u200b-\u200f\u202a-\u202e\u2060-\u206f]', '', text)
+    return bool(re.search(r'(?:ignore|override|bypass|disregard|forget)\b.{0,60}\b(?:instructions?|rules?|policy|verification)|'
+                          r'(?:system|developer|assistant|admin)\s*[:>]|'
+                          r'<\|(?:im_start|system)|\[\s*(?:system|developer)\s*\]|'
+                          r'(?:reveal|print|show)\b.{0,30}\b(?:system prompt|api key|password)|'
+                          r'(?:fabricate|fake|pretend)\b.{0,40}\b(?:tool|verified|success)', text, re.I | re.S))
+
+
+def safe_label_text(text):
+    text = str(text or '').strip()
+    if (len(text) > 120 or instruction_like(text) or re.search(r'[\r\n<>\{\}]|https?://|www\.', text, re.I)
+            or re.search(r'\b(?:password|pin|otp|one[ -]time (?:code|password))\b', text, re.I)):
+        return None
+    return text
+
+
+def blocked_input():
+    flag = S('x_security').lower()
+    return flag not in ('', 'clear') or any(instruction_like(S(k)) for k in ('x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time'))
+
+
+def reject_input():
+    for k in ('x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time'):
+        vars[k] = ''
+    vars['x_stance'], vars['presence'], vars['x_question_kind'] = 'other', 'unclear', 'unknown'
+    vars['x_intent'], vars['x_q'], vars['x_security'] = 'none', 'no', 'clear'
+    vars['security_blocked'] = True
+    speak(E['security_say'])
 
 
 def money(x):
@@ -410,11 +444,18 @@ def route(r):
 # ------------------------------------------------------------------ products
 
 def label_for(raw):
-    tpl = (E.get('pn') or {}).get(raw.get('type')) or str(raw.get('type') or 'account').replace('_', ' ')
+    # Retain unknown products and their records, but never turn their arbitrary
+    # free-text type into speech. Only compiler-known types supply a type name.
+    known = (E.get('pn') or {}).get(raw.get('type'))
+    fallback = str(raw.get('type')).replace('_', ' ') if known else 'account'
+    tpl = (E.get('pn') or {}).get(raw.get('type')) or fallback
 
     for k in re.findall(r'\{(\w+)\}', tpl):
-        if raw.get(k) in (None, ''):               # a placeholder with no data: name the product by its type alone
-            return str(raw.get('type') or 'account').replace('_', ' ')
+        value = str(raw.get(k) or '')
+        if (raw.get(k) in (None, '') or safe_label_text(value) is None
+                or not re.fullmatch(r'[\w-]{1,32}', value)
+                or (k.endswith('last4') and not re.fullmatch(r'[0-9]{4}', value))):
+            return fallback                       # never interpolate tool instructions into speech
 
     def rep(m):
         return str(raw.get(m.group(1)))
@@ -1556,7 +1597,10 @@ def transferred(st):
 def main():
     st = load()
     try:
-        if st.get('defer'):
+        vars['security_blocked'] = False
+        if blocked_input():
+            reject_input()                         # before close, identity, callback and payment dispatch
+        elif st.get('defer'):
             r, st['defer'] = st['defer'], ''
             I = E['intents'].get(S('x_intent').lower()) or {}
             if I.get('kind') == 'transfer':        # asked for a person or a plan while the close was waiting: that comes first
