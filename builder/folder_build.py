@@ -26,6 +26,23 @@ ROLES = {'policy', 'integration', 'scenario', 'fixture', 'operations'}
 SAFE_MODULES = {'json', 're', 'datetime', 'decimal', 'math', 'calendar', 'unicodedata'}
 
 
+def platform_compatible_workflow(workflow):
+    """Preserve documented loop instructions on APIs rejecting loop_prompt."""
+    result=copy.deepcopy(workflow)
+    for collection in ('nodes','global_nodes'):
+        for name,node in result.get(collection,{}).items():
+            if 'loop_prompt' not in node:
+                continue
+            loop=node.pop('loop_prompt')
+            if loop:
+                first=node.get('task_message','')
+                count='{{'+name+'.current_turns}}'
+                node['task_message']=('Current user turns since entering this node: '+count+'. '
+                    'On entry, before the caller answers this node (zero turns), use these instructions:\n'+first+
+                    '\nIf still in this node after a caller answer (one or more turns), use these instructions instead:\n'+loop)
+    return result
+
+
 def apply_audit_patch(candidate, operations):
     """Apply explicit add/remove/replace JSON pointers to a separate candidate."""
     if not isinstance(operations,list) or not operations:
@@ -381,6 +398,8 @@ def build_folder(args):
             workflow = result.get('workflow')
             if not isinstance(workflow, dict):
                 raise ValueError('compiler did not return a workflow')
+            workflow=platform_compatible_workflow(workflow)
+            result['workflow']=workflow
             errors, warnings = workflow_problems(workflow, plan, mock_url)
             required = {r['id'] for r in plan['requirements']}
             coverage = {c.get('requirement_id') for c in result.get('coverage', [])}
@@ -408,7 +427,8 @@ def build_folder(args):
                 result=audit['repair']
             else:
                 raise ValueError('source audit failed: ' + json.dumps(audit.get('issues'), ensure_ascii=False))
-            workflow = result.get('workflow', {})
+            workflow = platform_compatible_workflow(result.get('workflow', {}))
+            result['workflow']=workflow
             errors, _ = workflow_problems(workflow, plan, mock_url)
             if not {r['id'] for r in plan['requirements']} <= {c.get('requirement_id') for c in result.get('coverage', [])}:
                 errors.append('audit repair dropped required coverage')

@@ -1,8 +1,18 @@
 import unittest
-from builder.folder_build import choose_documents, origin, validate_plan, workflow_problems, code_problems, run_vectors
+from builder.folder_build import choose_documents, origin, validate_plan, workflow_problems, code_problems, run_vectors,platform_compatible_workflow
 
 
 class FolderCompilerTests(unittest.TestCase):
+    def test_platform_loop_compatibility_preserves_both_prompts_and_original(self):
+        original={'nodes':{'choose':{'task_message':'Initial question','loop_prompt':'Short retry'}},'global_nodes':{'guard':{'task_message':'Initial guard','loop_prompt':'Repeat guard'}}}
+        result=platform_compatible_workflow(original)
+        for collection,name in (('nodes','choose'),('global_nodes','guard')):
+            self.assertNotIn('loop_prompt',result[collection][name])
+            self.assertIn(original[collection][name]['task_message'],result[collection][name]['task_message'])
+            self.assertIn(original[collection][name]['loop_prompt'],result[collection][name]['task_message'])
+            self.assertIn('{{'+name+'.current_turns}}',result[collection][name]['task_message'])
+        self.assertIn('loop_prompt',original['nodes']['choose'])
+
     def test_generated_semantics_are_executed_and_wrong_answer_fails(self):
         tool={'type':'function','function':{'handler':'__function__:code_exec','parameters':{'properties':{'code':{'default':"vars['result'] = max(0, vars['amount'] - vars['paid'])"}}}}}
         result={'workflow':{'nodes':{'compute':{'pre_actions':[tool]}}},'tests':[{'name':'credit is not debt','node':'compute','vars':{'amount':10,'paid':15},'expect_vars':{'result':0}}]}
