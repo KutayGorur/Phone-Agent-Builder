@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))
 
 from builder.logic import snippet_lib as SL  # noqa: E402
 from builder.generate.ecfg import blocking_warnings, build_E_warn, first_sentence  # noqa: E402
+from builder.generate.sanitize import describe_notes, sanitize_spec  # noqa: E402
 
 DEFAULT_BASE = 'https://freya-bank-mock.freyavoice.workers.dev/v1/'
 BASE = DEFAULT_BASE          # set per spec by generate(): spec['tools_server'] when present
@@ -292,7 +293,9 @@ AMOUNT_PRE = ("\ntry:\n    b = config.get('body')\n    if isinstance(b, dict) an
 
 def generate(spec):
     global BASE
+    spec, shape_notes = sanitize_spec(spec)
     E, warns = build_E_warn(spec)
+    warns[:0] = describe_notes(shape_notes)
     BASE = tools_base(spec, warns)
     LAST_WARNINGS[:] = warns
     meta = spec.get('meta') or {}

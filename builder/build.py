@@ -222,6 +222,22 @@ def cross_check_parse(spec, briefs, tool_api, left, t, parse_target, spec_file):
     return new
 
 
+def shape_guard(spec, t):
+    """Spec sections of the wrong type (builder/generate/sanitize.py) are coerced or dropped before anything reads the spec, so one
+    malformed section cannot stop generate or the generated scenarios. Every change goes to the trace; a drop labels the build
+    degraded (the caller reads the second value)."""
+    san = _load("generate.sanitize", "sanitize_spec")
+    if san is None or not isinstance(spec, dict):
+        return spec, 0
+    try:
+        clean, notes = san(spec)
+    except Exception as e:  # noqa: BLE001
+        t.note(f"shape guard skipped: {e!r}"); return spec, 0
+    for n in notes:
+        (t.error if n["action"] == "dropped" else t.note)(f"shape guard: spec {n['path']} {n['action']}: {n['detail']}")
+    return clean, sum(1 for n in notes if n["action"] == "dropped")
+
+
 def a_parse_is_fake(parse_target, spec_file):
     """Tests and development runs swap the parser; the guard's child process needs the real one (and a model for the rest)."""
     return bool(spec_file) or parse_target != "builder.parse:parse"
@@ -372,10 +388,11 @@ def main(argv=None):
                 spec = stub_parse(briefs, tool_api)
         out_dir = pathlib.Path(a.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
         spec = cross_check_parse(spec, briefs, tool_api, left, t, a.parse_target, a.spec_file)
+        spec, n_dropped = shape_guard(spec, t)
         spec = enum_guard(spec, briefs, tool_api, out_dir, stem, left, t, a.parse_target, a.spec_file)
         (out_dir / f"{stem}.spec.json").write_text(json.dumps(spec, indent=1, ensure_ascii=False), encoding="utf-8")
         t.note(f"spec written to {out_dir / (stem + '.spec.json')}")
-        problems = readiness_problems(spec)
+        problems = readiness_problems(spec) + ([f"{n_dropped} malformed spec section(s) dropped by the shape guard"] if n_dropped else [])
         if problems:
             status = "degraded"
             t.error("spec not ready, build will be labelled degraded: " + "; ".join(problems))

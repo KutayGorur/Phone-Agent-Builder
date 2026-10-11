@@ -166,8 +166,14 @@ def shape_errors(spec):
                 br = it.get(key)
                 if br is not None and not (isinstance(br, dict) and _branch_reason_or_outcome(br)):
                     errs.append(f"intents[{i}].{key} has no readable outcome, reason or note: give it close {{outcome, reason}} or note {{reason}}")
-    for key in ("debt_statement", "amounts"):
+    for key in ("debt_statement", "amounts", "multi_product", "confirmation", "persuasion", "opening", "third_party"):
         sec(key)
+    for parent, key in (("multi_product", "create_promise_failure"), ("confirmation", "on_create_failed"), ("persuasion", "on_exhausted"),
+                        ("identity", "on_failed"), ("identity", "on_declined"), ("third_party", "wrong_number"), ("third_party", "deceased")):
+        v = (spec.get(parent) or {}).get(key) if isinstance(spec.get(parent), dict) else None
+        if v is not None:
+            need(f"{parent}.{key}", isinstance(v, dict), "an object" + (" {after_failed_tries, keep_recorded_promises, note: {reason}}" if key == "create_promise_failure"
+                                                                      else " {outcome, reason}"), v)
     ds = spec.get("debt_statement")
     if isinstance(ds, dict) and ds.get("product_names") is not None:
         need("debt_statement.product_names", isinstance(ds["product_names"], dict), "an object", ds["product_names"])

@@ -5,6 +5,7 @@ Everything is read from the spec; missing pieces get neutral defaults (never val
 import re
 
 from builder.logic.config import config_from_spec
+from builder.generate.sanitize import describe_notes, sanitize_spec
 
 DEFAULT_INTENT_DESC = {
     'already_paid': 'says they already paid this past-due amount',
@@ -463,7 +464,8 @@ def _ack_scope(conf, warns):
 
 # Warnings that mean the compiler substituted a guess for a mandatory meaning (as opposed to a field it ignores or a
 # harmless fallback). The build labels such a spec degraded.
-BLOCKING_MARKS = ('is not a known date rule', 'could be the promise outcome', 'no outcome without reasons',
+BLOCKING_MARKS = (' dropped: ',   # a malformed spec section the compiler had to drop (a coerced one is only a warning)
+                  'is not a known date rule', 'could be the promise outcome', 'no outcome without reasons',
                   'is mapped to two roles', 'taken from the text of "when"')
 
 
@@ -473,7 +475,8 @@ def blocking_warnings(warns):
 
 def build_E_warn(spec):
     """-> (E, warnings). Warnings are compile-time findings a human should read (guessed roles, ignored spec fields)."""
-    warns = []
+    spec, shape_notes = sanitize_spec(spec)
+    warns = describe_notes(shape_notes)
     E = _build(spec, warns)
     warns.extend(ignored_fields(spec))
     return E, warns

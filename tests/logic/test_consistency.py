@@ -58,13 +58,21 @@ class Unrepaired(unittest.TestCase):
         self.assertIn('persuasion', cs.critical_facts(b))
 
     def test_a_spec_the_full_compile_rejects_still_compares_the_rest(self):
-        b = base()
-        b['confirmation'] = 'read it back'     # the full compile raises on this
-        b['calendar']['holidays'] = ['2026-11-20']
-        facts = cs.critical_facts(b)
+        from builder.generate import ecfg
+        real = ecfg.build_E_warn
+
+        def boom(spec):
+            raise AttributeError('the full compile fails')
+        ecfg.build_E_warn = boom
+        try:
+            b = base()
+            b['calendar']['holidays'] = ['2026-11-20']
+            facts = cs.critical_facts(b)
+            ids = [d['id'] for d in cs.disagreements(base(), b)]
+        finally:
+            ecfg.build_E_warn = real
         self.assertNotIn('persuasion', facts)   # only readable through the full compile
         self.assertEqual(facts['holidays'], ['2026-11-20'])
-        ids = [d['id'] for d in cs.disagreements(base(), b)]
         self.assertIn('holidays', ids)
 
 
