@@ -11,7 +11,7 @@
     }
   ],
   "repo": "https://github.com/KutayGorur/Phone-Agent-Builder.git",
-  "commit": "67721e0028c45b89923ee43feb77dba82fd1a313",
+  "commit": "533468628b116661d812f6750f5b402b1afd42a5",
   "run_command": "python3 -m pip install -r requirements-documents.txt && PARSER_MODEL=claude-sonnet-5-5 PARSER_EFFORT=low python3 builder/build.py \"{case_folder}\" --mock-url https://kutay-bank-mock.final-mock-work.workers.dev --budget-min 27",
   "workflow": "submission/finalfolder.workflow.json",
   "trace": "submission/traces/finalfolder.log",
