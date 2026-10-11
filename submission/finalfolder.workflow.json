@@ -1,7 +1,7 @@
 {
  "workflow_id": "4a066e2a-10c5-4f86-aac1-5308f1191e8a",
  "agent_id": "9377d9b8-e607-41db-9935-6039fb472985",
- "updated_at": "2026-10-11T19:40:48.358Z",
+ "updated_at": "2026-10-11T19:46:34.461Z",
  "workflow": {
   "nodes": {
    "init": {
@@ -78,6 +78,21 @@
        "conditions": [
         {
          "mode": "exact",
+         "operand": "repeat",
+         "operator": "equals",
+         "variable": "offer_choice"
+        }
+       ]
+      },
+      "description": "Repeat request; not a try",
+      "target_node": "offer"
+     },
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "mode": "exact",
          "operand": "week",
          "operator": "equals",
          "variable": "offer_choice"
@@ -86,6 +101,32 @@
       },
       "description": "Wants statement date change",
       "target_node": "week_start"
+     },
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "logic": "and",
+         "conditions": [
+          {
+           "mode": "exact",
+           "operand": "email",
+           "operator": "equals",
+           "variable": "offer_choice"
+          },
+          {
+           "mode": "exact",
+           "operand": "unsupported",
+           "operator": "equals",
+           "variable": "email_qual"
+          }
+         ]
+        }
+       ]
+      },
+      "description": "E-mail with unsupported qualifier",
+      "target_node": "email_limit"
      },
      {
       "condition": {
@@ -137,15 +178,33 @@
      {
       "name": "offer_choice",
       "type": "string",
-      "description": "week: wants the statement date changed. email: wants the statement e-mailed. none: nothing, thanks, goodbye. unclear otherwise.",
+      "description": "week: wants the statement date changed. email: wants the statement e-mailed. none: nothing, thanks, goodbye. repeat: asks to hear it again. unclear otherwise.",
       "enum_values": [
        "week",
        "email",
        "none",
+       "repeat",
        "unclear",
        ""
       ],
       "min_confidence": 0.7
+     },
+     {
+      "name": "email_qual",
+      "type": "string",
+      "description": "unsupported if the caller wants an earlier or last month's statement, another e-mail address, paper or SMS; otherwise none.",
+      "enum_values": [
+       "unsupported",
+       "none",
+       ""
+      ],
+      "min_confidence": 0.7
+     },
+     {
+      "name": "week_pick",
+      "type": "integer",
+      "description": "Week number 1 to 4 only if the caller explicitly names a week of the month for the statement date; otherwise 0.",
+      "min_confidence": 0.8
      }
     ],
     "max_turn_transition": null,
@@ -362,6 +421,21 @@
        "conditions": [
         {
          "mode": "exact",
+         "operand": "repeat",
+         "operator": "equals",
+         "variable": "nm_choice"
+        }
+       ]
+      },
+      "description": "Repeat request; not a try",
+      "target_node": "no_email"
+     },
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "mode": "exact",
          "operand": "yes",
          "operator": "equals",
          "variable": "nm_choice"
@@ -411,7 +485,8 @@
        "yes",
        "no",
        "unclear",
-       ""
+       "",
+       "repeat"
       ],
       "min_confidence": 0.7
      }
@@ -523,7 +598,8 @@
     "name": "read_debt",
     "tools": [],
     "on_enter": {
-     "type": "llm"
+     "text": "{{read_say}}",
+     "type": "tts"
     },
     "node_type": "conversation",
     "assertions": [],
@@ -542,7 +618,7 @@
         }
        ]
       },
-      "description": "Caller asks to hear the reading again (not a try)",
+      "description": "Caller asks to hear it again; not a try",
       "target_node": "read_debt"
      },
      {
@@ -585,6 +661,38 @@
       },
       "description": "Caller wants to change the statement date or week",
       "target_node": "week_start"
+     },
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "logic": "and",
+         "conditions": [
+          {
+           "mode": "exact",
+           "operand": "email",
+           "operator": "equals",
+           "variable": "read_reply"
+          },
+          {
+           "mode": "exact",
+           "operand": "unsupported",
+           "operator": "equals",
+           "variable": "email_qual"
+          },
+          {
+           "mode": "exact",
+           "operand": "none",
+           "operator": "not_equals",
+           "variable": "offer_state"
+          }
+         ]
+        }
+       ]
+      },
+      "description": "E-mail request with unsupported qualifier",
+      "target_node": "email_limit"
      },
      {
       "condition": {
@@ -665,7 +773,7 @@
      }
     ],
     "role_message": "",
-    "task_message": "Current user turns since entering this node: {{read_debt.current_turns}}. On entry, before the caller answers this node (zero turns), use these instructions:\nNo tool call. Say this reading word for word, changing no number, name or date: {{reading_text}} Then in the same turn say: {{closing_q}} (skip if empty). If the caller earlier asked only for one figure, say only that figure instead (due date: {{fact_due}} ; minimum: {{fact_min}}) and then the closing question. Say nothing else and never read more than the last four card digits.\nIf still in this node after a caller answer (one or more turns), use these instructions instead:\nNo tool call. Ask briefly again: {{closing_q}} If the caller asks to hear the debt again, repeat {{reading_text}} word for word. Do not repeat the offer after a thank-you.",
+    "task_message": "No tool call. Ask briefly again: {{closing_q}} If the caller asks to hear the debt again, repeat {{reading_text}} word for word. Do not repeat the offer after a thank-you.",
     "interruptible": true,
     "max_node_turns": null,
     "response_mapping": [],
@@ -673,7 +781,7 @@
      {
       "name": "read_reply",
       "type": "string",
-      "description": "Reply to the last question. other_card: wants another card's debt (yes to the other-card question) or to switch cards. week: wants the statement date/week changed. email: wants the statement e-mailed. no_or_done: no, thanks, nothing more, goodbye. unclear: anything else, including a bare yes to an offer.",
+      "description": "Reply to the last question. other_card: wants another card's debt or to switch cards. week: wants the statement date/week changed. email: wants the statement e-mailed. no_or_done: no, thanks, nothing more, goodbye. repeat: asks to hear it again. unclear: anything else.",
       "enum_values": [
        "other_card",
        "week",
@@ -684,6 +792,23 @@
        ""
       ],
       "min_confidence": 0.7
+     },
+     {
+      "name": "email_qual",
+      "type": "string",
+      "description": "unsupported if the caller wants an earlier or last month's statement, another e-mail address, paper or SMS; otherwise none.",
+      "enum_values": [
+       "unsupported",
+       "none",
+       ""
+      ],
+      "min_confidence": 0.7
+     },
+     {
+      "name": "week_pick",
+      "type": "integer",
+      "description": "Week number 1 to 4 only if the caller explicitly names a week of the month for the statement date; otherwise 0.",
+      "min_confidence": 0.8
      }
     ],
     "max_turn_transition": null,
@@ -693,6 +818,114 @@
     "on_enter_first_entry_only": false,
     "disable_inactivity_monitor": false,
     "passthrough_default_transition": null,
+    "return_to_previous_on_interrupt": false
+   },
+   "read_only": {
+    "name": "read_only",
+    "tools": [],
+    "on_enter": {
+     "text": "{{reading_text}}",
+     "type": "tts"
+    },
+    "node_type": "conversation",
+    "assertions": [],
+    "passthrough": true,
+    "pre_actions": [],
+    "transitions": [
+     {
+      "condition": {
+       "mode": "exact",
+       "operator": "always"
+      },
+      "description": "always",
+      "target_node": "email_start"
+     }
+    ],
+    "role_message": "",
+    "task_message": "Reading already spoken. No tool call.",
+    "interruptible": true,
+    "max_node_turns": null,
+    "response_mapping": [],
+    "extraction_schema": [],
+    "max_turn_transition": null,
+    "truncation_strategy": "keep_all",
+    "suppress_tool_results": false,
+    "truncation_window_size": 10,
+    "on_enter_first_entry_only": false,
+    "disable_inactivity_monitor": false,
+    "passthrough_default_transition": "email_start",
+    "return_to_previous_on_interrupt": false
+   },
+   "read_prep": {
+    "name": "read_prep",
+    "tools": [],
+    "on_enter": {
+     "type": "silent"
+    },
+    "node_type": "code",
+    "assertions": [],
+    "passthrough": true,
+    "pre_actions": [
+     {
+      "type": "function",
+      "function": {
+       "name": "code_exec",
+       "handler": "__function__:code_exec",
+       "parameters": {
+        "type": "object",
+        "properties": {
+         "code": {
+          "type": "string",
+          "default": "try:\n    f=str(vars.get('figure_req') or '')\n    cq=str(vars.get('closing_q') or '')\n    rt=str(vars.get('reading_text') or '')\n    mode='full'\n    say=(rt+' '+cq).strip()\n    if f=='due' and vars.get('fact_due'):\n        say=(str(vars.get('fact_due'))+' '+cq).strip()\n    elif f=='min' and vars.get('fact_min'):\n        say=(str(vars.get('fact_min'))+' '+cq).strip()\n    elif f=='email' and vars.get('has_email')=='yes' and vars.get('bal_mode')=='debt':\n        mode='email'\n        say=rt\n    vars['read_say']=say\n    vars['read_mode']=mode\nexcept Exception:\n    vars['read_say']=str(vars.get('reading_text') or '')\n    vars['read_mode']='full'\nvars['figure_req']=''\n"
+         },
+         "timeout_ms": {
+          "type": "number",
+          "default": 10000
+         }
+        }
+       },
+       "description": ""
+      }
+     }
+    ],
+    "transitions": [
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "mode": "exact",
+         "operand": "email",
+         "operator": "equals",
+         "variable": "read_mode"
+        }
+       ]
+      },
+      "description": "debt plus e-mail in the same request",
+      "target_node": "read_only"
+     },
+     {
+      "condition": {
+       "mode": "exact",
+       "operator": "always"
+      },
+      "description": "always",
+      "target_node": "read_debt"
+     }
+    ],
+    "role_message": "",
+    "task_message": "",
+    "interruptible": true,
+    "max_node_turns": null,
+    "response_mapping": [],
+    "extraction_schema": [],
+    "max_turn_transition": null,
+    "truncation_strategy": "keep_all",
+    "suppress_tool_results": false,
+    "truncation_window_size": 10,
+    "on_enter_first_entry_only": false,
+    "disable_inactivity_monitor": false,
+    "passthrough_default_transition": "read_debt",
     "return_to_previous_on_interrupt": false
    },
    "calc_email": {
@@ -715,7 +948,7 @@
         "properties": {
          "code": {
           "type": "string",
-          "default": "try:\n    sc=str(vars.get('em_http') or vars.get('fetch_email_response.status_code') or '')\n    rc=str(vars.get('em_rc') or '')\n    if sc=='200' and rc=='1':\n        e=str(vars.get('em_addr') or '').strip()\n        t=str(vars.get('em_tts') or e).strip()\n        has=bool(e) and bool(str(vars.get('bal_stmt') or '').strip())\n        loc,dom=(t.split('@')+[''])[:2]\n        P=dict(gmail='Gmail',hotmail='Hotmail',outlook='Outlook',yahoo='Yahoo')\n        pv=P.get(dom.split('.')[0].lower())\n        say=(t+' adresine') if len(t)<=24 else (loc[:1]+' ile ba\u015flayan '+((pv+' ') if pv else 'e-posta ')+'adresinize')\n        vars['email_say']='Ekstrenizi '+say+' g\u00f6ndermemi ister misiniz?'\n        vars['email_addr']=e\n        vars['has_email']='yes' if has else 'no'\n        vars['noemail_text']='Bankam\u0131zda kay\u0131tl\u0131 bir e-posta adresiniz bulunmad\u0131\u011f\u0131 i\u00e7in ekstrenizi g\u00f6nderemiyorum.' if not e else 'Hen\u00fcz kesilmi\u015f bir ekstreniz olmad\u0131\u011f\u0131 i\u00e7in ekstrenizi g\u00f6nderemiyorum.'\n        o='Hesap kesim tarihinizi de\u011fi\u015ftirebilirim ya da ekstrenizi kay\u0131tl\u0131 mail adresinize g\u00f6nderebilirim.' if has else 'Hesap kesim tarihinizi de\u011fi\u015ftirebilirim.'\n        vars['offer_text']=o\n        if str(vars.get('elig_n'))!='1':\n            vars['closing_q']='Ba\u015fka bir kart\u0131n\u0131z\u0131n borcunu \u00f6\u011frenmek ister misiniz?'\n            vars['offer_state']='pending'\n        else:\n            vars['closing_q']=o\n            vars['offer_state']='inline'\n        vars['email_state']='ok'\n    else:\n        vars['email_state']='error'\nexcept Exception:\n    vars['email_state']='error'\nfor k in ('read_reply','offer_choice','email_choice'):\n    vars[k]=''\nvars['em_http']=''\nvars['em_rc']=''\n"
+          "default": "import re\ntry:\n    sc=str(vars.get('em_http') or vars.get('fetch_email_response.status_code') or '')\n    rc=str(vars.get('em_rc') or '')\n    if sc=='200' and rc=='1':\n        e=str(vars.get('em_addr') or '').strip()\n        t=str(vars.get('em_tts') or e).strip()\n        has=bool(e) and bool(str(vars.get('bal_stmt') or '').strip())\n        loc,dom=(t.split('@')+[''])[:2]\n        P=dict(gmail='Gmail',hotmail='Hotmail',outlook='Outlook',yahoo='Yahoo')\n        pv=P.get(dom.split('.')[0].lower())\n        plain=re.fullmatch(r'[A-Za-z]+(\\.[A-Za-z]+)?@[A-Za-z]+(\\.[A-Za-z]+)+',t) is not None\n        say=(t+' adresine') if plain else (loc[:1]+' ile ba\u015flayan '+((pv+' ') if pv else 'e-posta ')+'adresinize')\n        vars['email_say']='Ekstrenizi '+say+' g\u00f6ndermemi ister misiniz?'\n        vars['email_addr']=e\n        vars['has_email']='yes' if has else 'no'\n        vars['noemail_text']='Bankam\u0131zda kay\u0131tl\u0131 bir e-posta adresiniz bulunmad\u0131\u011f\u0131 i\u00e7in ekstrenizi g\u00f6nderemiyorum.' if not e else 'Hen\u00fcz kesilmi\u015f bir ekstreniz olmad\u0131\u011f\u0131 i\u00e7in ekstrenizi g\u00f6nderemiyorum.'\n        o='Hesap kesim tarihinizi de\u011fi\u015ftirebilirim ya da ekstrenizi kay\u0131tl\u0131 mail adresinize g\u00f6nderebilirim.' if has else 'Hesap kesim tarihinizi de\u011fi\u015ftirebilirim.'\n        vars['offer_text']=o\n        if str(vars.get('elig_n'))!='1':\n            vars['closing_q']='Ba\u015fka bir kart\u0131n\u0131z\u0131n borcunu \u00f6\u011frenmek ister misiniz?'\n            vars['offer_state']='pending'\n        else:\n            vars['closing_q']=o\n            vars['offer_state']='inline'\n        vars['email_state']='ok'\n    else:\n        vars['email_state']='error'\nexcept Exception:\n    vars['email_state']='error'\nfor k in ('read_reply','offer_choice','email_choice'):\n    vars[k]=''\nvars['em_http']=''\nvars['em_rc']=''\n"
          },
          "timeout_ms": {
           "type": "number",
@@ -741,7 +974,7 @@
        ]
       },
       "description": "e-mail lookup ok",
-      "target_node": "read_debt"
+      "target_node": "read_prep"
      },
      {
       "condition": {
@@ -1579,7 +1812,7 @@
         "properties": {
          "code": {
           "type": "string",
-          "default": "try:\n    for k,v in (('week_want',''),('week_pick','0'),('week_cancel',''),('week_confirm',''),('wk_tries','0'),('nm_choice','')):\n        vars[k]=v\nexcept Exception:\n    pass\n"
+          "default": "try:\n    for k,v in (('week_want',''),('week_cancel',''),('week_confirm',''),('wk_tries','0'),('nm_choice','')):\n        vars[k]=v\nexcept Exception:\n    pass\n"
          },
          "timeout_ms": {
           "type": "number",
@@ -1972,6 +2205,21 @@
        "conditions": [
         {
          "mode": "exact",
+         "operand": "repeat",
+         "operator": "equals",
+         "variable": "limit_choice"
+        }
+       ]
+      },
+      "description": "Repeat request; not a try",
+      "target_node": "email_limit"
+     },
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "mode": "exact",
          "operand": "yes",
          "operator": "equals",
          "variable": "limit_choice"
@@ -2021,7 +2269,8 @@
        "yes",
        "no",
        "unclear",
-       ""
+       "",
+       "repeat"
       ],
       "min_confidence": 0.8
      }
@@ -2571,21 +2820,6 @@
        "conditions": [
         {
          "mode": "exact",
-         "operand": "repeat",
-         "operator": "equals",
-         "variable": "sel_kind"
-        }
-       ]
-      },
-      "description": "Caller asks to hear the question again (not a try)",
-      "target_node": "select_card"
-     },
-     {
-      "condition": {
-       "logic": "or",
-       "conditions": [
-        {
-         "mode": "exact",
          "operand": "name",
          "operator": "equals",
          "variable": "sel_kind"
@@ -2639,7 +2873,6 @@
        "digits",
        "all_cards",
        "unavailable",
-       "repeat",
        "none",
        ""
       ],
@@ -2656,6 +2889,19 @@
       "type": "string",
       "description": "Only digits the caller said, converted to a digit string (e.g. 'k\u0131rk iki elli \u00fc\u00e7' -> 4253). Empty if none.",
       "min_confidence": 0.6
+     },
+     {
+      "name": "figure_req",
+      "type": "string",
+      "description": "Qualifier of the caller's first request: due = only the due date, min = only the minimum payment, email = also wants the statement e-mailed in the same request, none otherwise.",
+      "enum_values": [
+       "due",
+       "min",
+       "email",
+       "none",
+       ""
+      ],
+      "min_confidence": 0.7
      }
     ],
     "max_turn_transition": null,
@@ -2678,6 +2924,21 @@
     "passthrough": false,
     "pre_actions": [],
     "transitions": [
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "mode": "exact",
+         "operand": "repeat",
+         "operator": "equals",
+         "variable": "week_cancel"
+        }
+       ]
+      },
+      "description": "Repeat request; not a try",
+      "target_node": "week_choose"
+     },
      {
       "condition": {
        "logic": "or",
@@ -2738,7 +2999,8 @@
       "enum_values": [
        "cancel",
        "none",
-       ""
+       "",
+       "repeat"
       ],
       "min_confidence": 0.8
      }
@@ -2772,7 +3034,7 @@
         "properties": {
          "code": {
           "type": "string",
-          "default": "import json\nU=['','bir','iki','\u00fc\u00e7','d\u00f6rt','be\u015f','alt\u0131','yedi','sekiz','dokuz']\nT=['','on','yirmi','otuz','k\u0131rk','elli','altm\u0131\u015f','yetmi\u015f','seksen','doksan']\nM=['','Ocak','\u015eubat','Mart','Nisan','May\u0131s','Haziran','Temmuz','A\u011fustos','Eyl\u00fcl','Ekim','Kas\u0131m','Aral\u0131k']\nMS=['','t\u0131r','t\u0131r','t\u0131r','d\u0131r','t\u0131r','d\u0131r','dur','tur','d\u00fcr','dir','d\u0131r','t\u0131r']\nYS=['dir','dir','dir','t\u00fcr','t\u00fcr','tir','d\u0131r','dir','dir','dur']\nCUR=dict(TL=('T\u00fcrk Liras\u0131','lira','kuru\u015f'),USD=('Dolar','dolar','sent'),EUR=('Euro','euro','sent'),GBP=('\u0130ngiliz Sterlini','\u0130ngiliz Sterlini','peni'))\nSF=dict(Liras\u0131='d\u0131r',kuru\u015f='tur',Dolar='d\u0131r',dolar='d\u0131r',Euro='dur',euro='dur',Sterlini='dir',sent='tir',peni='dir')\nAPO=chr(39)\ndef J(x):\n    if isinstance(x,str):\n        try:\n            return json.loads(x)\n        except Exception:\n            return None\n    return x\ndef tri(n):\n    s=''\n    h=n//100\n    if h:\n        s=('' if h==1 else U[h]+' ')+'y\u00fcz '\n    s+=T[n//10%10]+' '+U[n%10]\n    return ' '.join(s.split())\ndef W(n):\n    if n==0:\n        return 's\u0131f\u0131r'\n    o=[]\n    for v,nm in ((10**9,'milyar'),(10**6,'milyon'),(1000,'bin'),(1,'')):\n        q=n//v\n        n=n%v\n        if q:\n            o.append('bin' if nm=='bin' and q==1 else (tri(q)+' '+nm).strip())\n    return ' '.join(o)\ndef A(x,c):\n    p=int(round(abs(float(x))*100))\n    k=p%100\n    n=CUR[c]\n    if k==0:\n        return W(p//100)+' '+n[0]\n    return W(p//100)+' '+n[1]+' '+W(k)+' '+n[2]\ndef E(x,c):\n    a=A(x,c)\n    return a+APO+SF.get(a.split()[-1],'d\u0131r')\ndef DT(s):\n    p=str(s).split('.')\n    return str(int(p[0]))+' '+M[int(p[1])]+' '+p[2]\ndef DN(s,y):\n    return DT(s)\ndef DU(s,y):\n    p=str(s).split('.')\n    return str(int(p[0]))+' '+M[int(p[1])]+' '+p[2]+APO+YS[int(p[2][-1])]\ndef K(s):\n    p=str(s).split('.')\n    return (int(p[2]),int(p[1]),int(p[0]))\ndef F(x):\n    try:\n        return float(x)\n    except Exception:\n        return None\ndef G(b,k):\n    o=J(vars.get('bal_'+b))\n    if isinstance(o,dict) and o.get(k) is not None:\n        return o.get(k)\n    return vars.get('fetch_balance_response.data.data.debt'+b+'.'+k)\ntry:\n    sc=str(vars.get('bal_http') or vars.get('fetch_balance_response.status_code') or '')\n    if not (sc=='200' and str(vars.get('bal_rc') or '')=='1'):\n        raise ValueError('bad')\n    nw=str(vars.get('now'))[:10].split('-')\n    today=nw[2]+'.'+nw[1]+'.'+nw[0]\n    st=str(vars.get('bal_stmt') or '').strip()\n    pay=str(vars.get('bal_pay') or '').strip()\n    nx=str(vars.get('bal_next') or '').strip()\n    cut=(nx==today)\n    l4=str(vars.get('sel_l4w'))\n    nme=str(vars.get('sel_name') or '')\n    pre=(nme+' ') if nme else ''\n    intro='Sonu '+l4+' ile biten '+pre+'kart\u0131n\u0131za ait'\n    B=dict()\n    for c in ('TL','USD','EUR','GBP'):\n        r=F(G(c,'remainingDebt'))\n        td=F(G(c,'totalDebt'))\n        basis=td if cut else r\n        B[c]=((r is not None) or (td is not None), basis is not None and basis>0)\n    fdue=''\n    fmin=''\n    if not st and not pay:\n        txt='Sonu '+l4+' ile biten '+pre+'kart\u0131n\u0131z i\u00e7in. Kart\u0131n\u0131z\u0131n hen\u00fcz kesilmi\u015f bir ekstresi olmad\u0131\u011f\u0131 i\u00e7in ekstre borcunuz bulunmamaktad\u0131r.'\n        if nx:\n            txt+=' \u0130lk hesap kesim tarihiniz '+DT(nx)+' olacak.'\n        mode='nodebt'\n    elif not any(v[1] for v in B.values()):\n        txt='Sonu '+l4+' ile biten '+pre+'kart\u0131n\u0131z\u0131n '+((DT(st)+' tarihli ') if st else '')+'ekstresinden borcunuz bulunmamaktad\u0131r.'\n        tt=F(G('TL','totalDebt'))\n        if tt is not None and tt>0:\n            txt+=' Gelecek d\u00f6nemler dahil toplam borcunuz '+E(tt,'TL')+'.'\n        if pay:\n            txt+=' Son \u00f6deme tarihiniz '+DN(pay,nw[0])+' olacakt\u0131r.'\n        mode='nodebt'\n    else:\n        mode='debt'\n        txt='Hesap kesim tarihiniz bug\u00fcn, ekstreniz saat 00.00 itibar\u0131yla kesilecek. ' if cut else ''\n        lead=intro+' '+((DT(st)+' tarihinde kesilen ekstre ') if (st and not cut) else '')\n        nod=[]\n        first=True\n        for c in ('TL','USD','EUR','GBP'):\n            ex,hd=B[c]\n            if not ex:\n                continue\n            if not hd:\n                nod.append(CUR[c][0])\n                continue\n            sd=G(c,'statementDebt')\n            mp=G(c,'minPayment')\n            rd=G(c,'remainingDebt')\n            td=G(c,'totalDebt')\n            rm=F(G(c,'remainingMinPayment'))\n            mpf=F(mp)\n            nmc=CUR[c][0]\n            if cut:\n                s=nmc+' borcunuz '+E(td,c)+'.'\n            elif c=='TL':\n                if rm is None or (rm>0 and mpf is not None and rm>=mpf):\n                    s='T\u00fcrk Liras\u0131 borcunuz '+A(sd,c)+', \u00f6denmesi gereken minimum tutar '+E(mp,c)+'.'\n                elif rm<=0:\n                    s='T\u00fcrk Liras\u0131 borcunuz '+A(sd,c)+', kalan toplam borcunuz '+E(rd,c)+'. Minimum \u00f6demenizi yapt\u0131\u011f\u0131n\u0131z i\u00e7in te\u015fekk\u00fcr ederiz.'\n                else:\n                    s='T\u00fcrk Liras\u0131 borcunuz '+A(sd,c)+', \u00f6denmesi gereken minimum tutar '+A(mp,c)+', kalan toplam borcunuz '+A(rd,c)+', kalan minimum \u00f6deme tutar\u0131n\u0131z '+E(rm,c)+'.'\n            else:\n                s=nmc+' borcunuz '+A(sd,c)+', kalan toplam borcunuz '+A(rd,c)+', \u00f6denmesi gereken minimum tutar '+E(mp,c)+'.'\n            if c=='TL' and not cut:\n                fmin='\u00d6denmesi gereken minimum tutar '+E(mp,c)+'.'\n            txt+=(lead if first else '')+s+' '\n            first=False\n        if nod:\n            txt+=(nod[0] if len(nod)==1 else ', '.join(nod[:-1])+' ve '+nod[-1])+' borcunuz bulunmamaktad\u0131r. '\n        passed=bool(pay) and K(pay)<K(today)\n        rem=F(G('TL','remainAutomaticPaymentAmount'))\n        if passed and str(vars.get('bal_flag'))=='Y' and rem is not None and rem>0:\n            txt+='Otomatik \u00f6deme talimat\u0131n\u0131z kapsam\u0131nda hen\u00fcz tahsil edilecek '+A(rem,'TL')+' tutar\u0131 bulunmaktad\u0131r. '\n        if pay:\n            if K(pay)==K(today):\n                fdue='Bor\u00e7lar\u0131n\u0131z i\u00e7in son \u00f6deme tarihiniz bug\u00fcnd\u00fcr.'\n            elif passed:\n                tp=[A(F(G(c,'totalDebt')),c) for c in ('TL','USD','EUR','GBP') if B[c][0] and (F(G(c,'totalDebt')) or 0)>0]\n                fdue='Bor\u00e7lar\u0131n\u0131z i\u00e7in son \u00f6deme tarihiniz ge\u00e7mi\u015f durumda.'+((' Toplam borcunuz '+', '.join(tp)+' tutar\u0131ndad\u0131r.') if tp else '')\n            else:\n                fdue='Bor\u00e7lar\u0131n\u0131z i\u00e7in son \u00f6deme tarihiniz '+DU(pay,nw[0])+'.'\n        txt+=fdue\n    vars['reading_text']=txt.strip()\n    vars['fact_due']=fdue\n    vars['fact_min']=fmin\n    vars['bal_mode']=mode\n    if mode=='nodebt':\n        vars['closing_q']='' if str(vars.get('elig_n'))=='1' else 'Ba\u015fka bir kart\u0131n\u0131z\u0131n borcunu \u00f6\u011frenmek ister misiniz?'\n        vars['offer_state']='none'\n    vars['read_reply']=''\n    vars['bal_state']='ok'\nexcept Exception:\n    vars['bal_state']='error'\nvars['bal_http']=''\nvars['bal_rc']=''\n"
+          "default": "import json\nU=['','bir','iki','\u00fc\u00e7','d\u00f6rt','be\u015f','alt\u0131','yedi','sekiz','dokuz']\nT=['','on','yirmi','otuz','k\u0131rk','elli','altm\u0131\u015f','yetmi\u015f','seksen','doksan']\nM=['','Ocak','\u015eubat','Mart','Nisan','May\u0131s','Haziran','Temmuz','A\u011fustos','Eyl\u00fcl','Ekim','Kas\u0131m','Aral\u0131k']\nYS=['d\u0131r','dir','dir','t\u00fcr','t\u00fcr','tir','d\u0131r','dir','dir','dur']\nCUR=dict(TL=('T\u00fcrk Liras\u0131','lira','kuru\u015f'),USD=('Dolar','dolar','sent'),EUR=('Euro','euro','sent'),GBP=('\u0130ngiliz Sterlini','\u0130ngiliz Sterlini','peni'))\nSF=dict(Liras\u0131='d\u0131r',kuru\u015f='tur',Dolar='d\u0131r',dolar='d\u0131r',Euro='dur',euro='dur',Sterlini='dir',sent='tir',peni='dir')\nAPO=chr(39)\ndef J(x):\n    if isinstance(x,str):\n        try:\n            return json.loads(x)\n        except Exception:\n            return None\n    return x\ndef tri(n):\n    s=''\n    h=n//100\n    if h:\n        s=('' if h==1 else U[h]+' ')+'y\u00fcz '\n    s+=T[n//10%10]+' '+U[n%10]\n    return ' '.join(s.split())\ndef W(n):\n    if n==0:\n        return 's\u0131f\u0131r'\n    o=[]\n    for v,nm in ((10**9,'milyar'),(10**6,'milyon'),(1000,'bin'),(1,'')):\n        q=n//v\n        n=n%v\n        if q:\n            o.append('bin' if nm=='bin' and q==1 else (tri(q)+' '+nm).strip())\n    return ' '.join(o)\ndef A(x,c):\n    p=int(round(abs(float(x))*100))\n    k=p%100\n    n=CUR[c]\n    if k==0:\n        return W(p//100)+' '+n[0]\n    return W(p//100)+' '+n[1]+' '+W(k)+' '+n[2]\ndef E(x,c):\n    a=A(x,c)\n    return a+APO+SF.get(a.split()[-1],'d\u0131r')\ndef DT(s):\n    p=str(s).split('.')\n    return str(int(p[0]))+' '+M[int(p[1])]+' '+p[2]\ndef DU(s,y):\n    p=str(s).split('.')\n    return str(int(p[0]))+' '+M[int(p[1])]+' '+p[2]+APO+YS[int(p[2][-1])]\ndef K(s):\n    p=str(s).split('.')\n    return (int(p[2]),int(p[1]),int(p[0]))\ndef F(x):\n    try:\n        return float(x)\n    except Exception:\n        return None\ndef G(b,k):\n    o=J(vars.get('bal_'+b))\n    if isinstance(o,dict) and o.get(k) is not None:\n        return o.get(k)\n    return vars.get('fetch_balance_response.data.data.debt'+b+'.'+k)\ntry:\n    sc=str(vars.get('bal_http') or vars.get('fetch_balance_response.status_code') or '')\n    if not (sc=='200' and str(vars.get('bal_rc') or '')=='1'):\n        raise ValueError('bad')\n    nw=str(vars.get('now'))[:10].split('-')\n    today=nw[2]+'.'+nw[1]+'.'+nw[0]\n    st=str(vars.get('bal_stmt') or '').strip()\n    pay=str(vars.get('bal_pay') or '').strip()\n    nx=str(vars.get('bal_next') or '').strip()\n    cut=(nx==today)\n    l4=str(vars.get('sel_l4w'))\n    nme=str(vars.get('sel_name') or '')\n    pre=(nme+' ') if nme else ''\n    intro='Sonu '+l4+' ile biten '+pre+'kart\u0131n\u0131za ait'\n    B=dict()\n    for c in ('TL','USD','EUR','GBP'):\n        r=F(G(c,'remainingDebt'))\n        td=F(G(c,'totalDebt'))\n        basis=td if cut else r\n        B[c]=((r is not None) or (td is not None), basis is not None and basis>0)\n    fdue=''\n    fmin=''\n    if not st and not pay:\n        txt='Sonu '+l4+' ile biten '+pre+'kart\u0131n\u0131z i\u00e7in. Kart\u0131n\u0131z\u0131n hen\u00fcz kesilmi\u015f bir ekstresi olmad\u0131\u011f\u0131 i\u00e7in ekstre borcunuz bulunmamaktad\u0131r.'\n        if nx:\n            txt+=' \u0130lk hesap kesim tarihiniz '+DT(nx)+' olacak.'\n        mode='nodebt'\n    elif not any(v[1] for v in B.values()):\n        txt='Sonu '+l4+' ile biten '+pre+'kart\u0131n\u0131z\u0131n '+((DT(st)+' tarihli ') if st else '')+'ekstresinden borcunuz bulunmamaktad\u0131r.'\n        tt=F(G('TL','totalDebt'))\n        if tt is not None and tt>0:\n            txt+=' Gelecek d\u00f6nemler dahil toplam borcunuz '+E(tt,'TL')+'.'\n        if pay:\n            txt+=' Son \u00f6deme tarihiniz '+DT(pay)+' olacakt\u0131r.'\n        mode='nodebt'\n    else:\n        mode='debt'\n        txt='Hesap kesim tarihiniz bug\u00fcn, ekstreniz saat 00.00 itibar\u0131yla kesilecek. ' if cut else ''\n        lead=intro+' '+((DT(st)+' tarihinde kesilen ekstre ') if (st and not cut) else '')\n        nod=[]\n        first=True\n        for c in ('TL','USD','EUR','GBP'):\n            ex,hd=B[c]\n            if not ex:\n                continue\n            if not hd:\n                nod.append(CUR[c][0])\n                continue\n            sd=G(c,'statementDebt')\n            mp=G(c,'minPayment')\n            rd=G(c,'remainingDebt')\n            td=G(c,'totalDebt')\n            rm=F(G(c,'remainingMinPayment'))\n            mpf=F(mp)\n            nmc=CUR[c][0]\n            if cut:\n                s=nmc+' borcunuz '+E(td,c)+'.'\n            elif c=='TL':\n                if rm is None or (rm>0 and mpf is not None and rm>=mpf):\n                    s='T\u00fcrk Liras\u0131 borcunuz '+A(sd,c)+', \u00f6denmesi gereken minimum tutar '+E(mp,c)+'.'\n                elif rm<=0:\n                    s='T\u00fcrk Liras\u0131 borcunuz '+A(sd,c)+', kalan toplam borcunuz '+E(rd,c)+'. Minimum \u00f6demenizi yapt\u0131\u011f\u0131n\u0131z i\u00e7in te\u015fekk\u00fcr ederiz.'\n                else:\n                    s='T\u00fcrk Liras\u0131 borcunuz '+A(sd,c)+', \u00f6denmesi gereken minimum tutar '+A(mp,c)+', kalan toplam borcunuz '+A(rd,c)+', kalan minimum \u00f6deme tutar\u0131n\u0131z '+E(rm,c)+'.'\n            else:\n                s=nmc+' borcunuz '+A(sd,c)+', kalan toplam borcunuz '+A(rd,c)+', \u00f6denmesi gereken minimum tutar '+E(mp,c)+'.'\n            if c=='TL' and not cut:\n                fmin='\u00d6denmesi gereken minimum tutar '+E(mp,c)+'.'\n            txt+=(lead if first else '')+s+' '\n            first=False\n        if nod:\n            txt+=(nod[0] if len(nod)==1 else ', '.join(nod[:-1])+' ve '+nod[-1])+' borcunuz bulunmamaktad\u0131r. '\n        passed=bool(pay) and K(pay)<K(today)\n        rem=F(G('TL','remainAutomaticPaymentAmount'))\n        if passed and str(vars.get('bal_flag'))=='Y' and rem is not None and rem>0:\n            txt+='Otomatik \u00f6deme talimat\u0131n\u0131z kapsam\u0131nda hen\u00fcz tahsil edilecek '+A(rem,'TL')+' tutar\u0131 bulunmaktad\u0131r. '\n        if pay:\n            if K(pay)==K(today):\n                fdue='Bor\u00e7lar\u0131n\u0131z i\u00e7in son \u00f6deme tarihiniz bug\u00fcnd\u00fcr.'\n            elif passed:\n                tp=[A(F(G(c,'totalDebt')),c) for c in ('TL','USD','EUR','GBP') if B[c][0] and (F(G(c,'totalDebt')) or 0)>0]\n                fdue='Bor\u00e7lar\u0131n\u0131z i\u00e7in son \u00f6deme tarihiniz ge\u00e7mi\u015f durumda.'+((' Toplam borcunuz '+', '.join(tp)+' tutar\u0131ndad\u0131r.') if tp else '')\n            else:\n                fdue='Bor\u00e7lar\u0131n\u0131z i\u00e7in son \u00f6deme tarihiniz '+DU(pay,nw[0])+'.'\n        txt+=fdue\n    vars['reading_text']=txt.strip()\n    vars['fact_due']=fdue\n    vars['fact_min']=fmin\n    vars['bal_mode']=mode\n    if mode=='nodebt':\n        vars['closing_q']='' if str(vars.get('elig_n'))=='1' else 'Ba\u015fka bir kart\u0131n\u0131z\u0131n borcunu \u00f6\u011frenmek ister misiniz?'\n        vars['offer_state']='none'\n    vars['read_reply']=''\n    vars['bal_state']='ok'\nexcept Exception:\n    vars['bal_state']='error'\nvars['bal_http']=''\nvars['bal_rc']=''\n"
          },
          "timeout_ms": {
           "type": "number",
@@ -2839,7 +3101,7 @@
        ]
       },
       "description": "no debt, other card question",
-      "target_node": "read_debt"
+      "target_node": "read_prep"
      },
      {
       "condition": {
@@ -2988,7 +3250,8 @@
     "name": "week_confirm",
     "tools": [],
     "on_enter": {
-     "type": "llm"
+     "text": "{{confirm_text}}",
+     "type": "tts"
     },
     "node_type": "conversation",
     "assertions": [],
@@ -3007,7 +3270,7 @@
         }
        ]
       },
-      "description": "Caller asks to hear the confirmation again (not a try)",
+      "description": "Repeat request; not a try",
       "target_node": "week_confirm"
      },
      {
@@ -3052,7 +3315,7 @@
      }
     ],
     "role_message": "",
-    "task_message": "Current user turns since entering this node: {{week_confirm.current_turns}}. On entry, before the caller answers this node (zero turns), use these instructions:\nNo tool call. Say this word for word, keeping any joint-card sentence as its own sentence before the question: {{confirm_text}}\nIf still in this node after a caller answer (one or more turns), use these instructions instead:\nNo tool call. Ask plainly again, in the same words: {{confirm_text}} Do not skip the confirmation even if the caller says 'sorma, direkt yap'.",
+    "task_message": "No tool call. Ask plainly again, in the same words: {{confirm_text}} Do not skip the confirmation even if the caller says 'sorma, direkt yap'.",
     "interruptible": true,
     "max_node_turns": null,
     "response_mapping": [],
@@ -3064,9 +3327,9 @@
       "enum_values": [
        "yes",
        "no",
-       "repeat",
        "unclear",
-       ""
+       "",
+       "repeat"
       ],
       "min_confidence": 0.85
      }
@@ -3084,13 +3347,29 @@
     "name": "week_current",
     "tools": [],
     "on_enter": {
-     "type": "llm"
+     "text": "{{week_read}}",
+     "type": "tts"
     },
     "node_type": "conversation",
     "assertions": [],
     "passthrough": false,
     "pre_actions": [],
     "transitions": [
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "mode": "exact",
+         "operand": "repeat",
+         "operator": "equals",
+         "variable": "week_want"
+        }
+       ]
+      },
+      "description": "Repeat request; not a try",
+      "target_node": "week_current"
+     },
      {
       "condition": {
        "logic": "or",
@@ -3148,7 +3427,7 @@
      }
     ],
     "role_message": "",
-    "task_message": "Current user turns since entering this node: {{week_current.current_turns}}. On entry, before the caller answers this node (zero turns), use these instructions:\nNo tool call. Say this word for word: {{week_read}}\nIf still in this node after a caller answer (one or more turns), use these instructions instead:\nNo tool call. Ask briefly: Hesap kesim tarihinizi de\u011fi\u015ftirmek ister misiniz? If asked to repeat, repeat {{week_read}} word for word.",
+    "task_message": "No tool call. Ask briefly: Hesap kesim tarihinizi de\u011fi\u015ftirmek ister misiniz? If asked to repeat, repeat {{week_read}} word for word.",
     "interruptible": true,
     "max_node_turns": null,
     "response_mapping": [],
@@ -3161,7 +3440,8 @@
        "yes",
        "no",
        "unclear",
-       ""
+       "",
+       "repeat"
       ],
       "min_confidence": 0.7
      },
@@ -3204,7 +3484,7 @@
         }
        ]
       },
-      "description": "Caller asks to hear the question again (not a try)",
+      "description": "Repeat request; not a try",
       "target_node": "email_confirm"
      },
      {
@@ -3293,9 +3573,9 @@
        "no",
        "wrong_address",
        "other_request",
-       "repeat",
        "unclear",
-       ""
+       "",
+       "repeat"
       ],
       "min_confidence": 0.8
      }
@@ -4658,7 +4938,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -4690,6 +4972,21 @@
     "passthrough": false,
     "pre_actions": [],
     "transitions": [
+     {
+      "condition": {
+       "logic": "or",
+       "conditions": [
+        {
+         "mode": "exact",
+         "operand": "repeat",
+         "operator": "equals",
+         "variable": "oos_reply"
+        }
+       ]
+      },
+      "description": "Repeat request; not a try",
+      "target_node": "g_oos"
+     },
      {
       "condition": {
        "logic": "or",
@@ -4789,7 +5086,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -4802,7 +5101,8 @@
        "menu_yes",
        "continue",
        "unclear",
-       ""
+       "",
+       "repeat"
       ],
       "min_confidence": 0.5
      }
@@ -4899,7 +5199,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -4996,7 +5298,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -5037,7 +5341,7 @@
         "properties": {
          "code": {
           "type": "string",
-          "default": "try:\n    n=int(vars.get('angry_n') or 0)+1\n    vars['angry_n']=str(n)\n    L=['Yard\u0131mc\u0131 olmak i\u00e7in elimden geleni yap\u0131yorum.','Sizi dinliyorum ve sorununuzu \u00e7\u00f6zmeye \u00e7al\u0131\u015f\u0131yorum.','Ya\u015fad\u0131\u011f\u0131n\u0131z rahats\u0131zl\u0131\u011f\u0131 anl\u0131yorum, size yard\u0131mc\u0131 olmaya devam etmek istiyorum.','Sizi m\u00fc\u015fteri temsilcimize aktar\u0131yorum.']\n    vars['angry_say']=L[min(n,4)-1]\nexcept Exception:\n    pass\n"
+          "default": "try:\n    n=int(vars.get('angry_n') or 0)+1\n    vars['angry_n']=str(n)\n    L=['Sizi anl\u0131yorum, size yard\u0131mc\u0131 olmak istiyorum.','Yard\u0131mc\u0131 olmak i\u00e7in elimden geleni yap\u0131yorum.','Sizi dinliyorum ve sorununuzu \u00e7\u00f6zmeye \u00e7al\u0131\u015f\u0131yorum.','Sizi m\u00fc\u015fteri temsilcimize aktar\u0131yorum.']\n    vars['angry_say']=L[min(n,4)-1]\nexcept Exception:\n    pass\n"
          },
          "timeout_ms": {
           "type": "number",
@@ -5131,7 +5435,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -5228,7 +5534,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -5325,7 +5633,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -5460,7 +5770,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
@@ -5557,7 +5869,9 @@
      "g_third",
      "g_angry",
      "g_silence",
-     "g_adv"
+     "g_adv",
+     "read_prep",
+     "read_only"
     ],
     "max_node_turns": null,
     "response_mapping": [],
