@@ -1,6 +1,6 @@
 # Sim slot lock
 
-(currently free)
+Reserved by Codex for Kutay's explicit unchanged rerun, 2026-10-11. Full A v10 then full A+B v5, one pass each; same concurrency as preceding suites (5 / 2). No source or workflow changes. Published versions verified; no active simulations before reservation.
 
 Latest completed coverage: A v10 full 7/10; A+B v5 full 11/13 raw (both failures are B-required notes conflicting with A-only fixtures; all 13 conversation verdicts and all three B-specific cases pass). Guard return fix 04f41cf retested 1/1. Simulations finished, none running from this continuation. Platform remains slow; no robustness repetitions. Details and open issues: team/comms/platform-case-review.md.
 
