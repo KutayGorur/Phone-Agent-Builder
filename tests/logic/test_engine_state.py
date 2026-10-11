@@ -301,9 +301,8 @@ class Termination(unittest.TestCase):
         p = Probe().say('agree')
         p.say('sp_does_not_want_to_talk')
         p.say('sp_does_not_want_to_talk', q='yes')
-        self.assertEqual(p.v['route'], 'ask')
-        p.say('none')                                                    # whatever they say next, the close follows
-        self.assertEqual(p.v['route'], 'note')
+        self.assertEqual(p.v['route'], 'note')                           # the answer is a fixed line in front of the closing
+        self.assertTrue(p.st['lead'].startswith('I do not have that information.'), p.st['lead'])
 
     def test_acc26_missing_account_fields_are_not_invented(self):
         ns = ns_for()

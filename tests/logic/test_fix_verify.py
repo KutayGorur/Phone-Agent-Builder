@@ -185,28 +185,14 @@ class R7Interruptions(unittest.TestCase):
         p.say('none')
         self.assertEqual((p.v['route'], p.v['cp_pid']), ('create', 'g2'))
 
-    def test_r7_close_question_gets_an_answer_without_negotiation_text(self):
+    def test_r7_close_question_gets_a_fixed_answer_in_front_of_the_closing(self):
         p = Probe(products=(PERSONAL,))
         p.say('sp_already_paid', q='yes')
-        self.assertEqual(p.v['route'], 'ask')
-        self.assertIn('ask nothing further', p.v['instruction'])
-        self.assertNotIn('Then say', p.v['instruction'])
-        self.assertNotIn('make this payment', p.v['instruction'])
-
-    def test_r7_transfer_request_while_the_close_waits(self):
-        p = Probe(products=(PERSONAL,))
-        p.say('sp_already_paid', q='yes')
-        p.say('sp_restructuring')
-        self.assertEqual(p.v['route'], 'transfer')
-        p.v['tr_ok'] = 'true'
-        p.run()
-        self.assertEqual(p.v['close_outcome'], 'transferred')
-
-    def test_r7_silent_next_turn_still_closes(self):
-        p = Probe(products=(PERSONAL,))
-        p.say('sp_already_paid', q='yes')
-        p.say('none')
-        self.assertEqual(p.v['route'], 'note')
+        self.assertEqual(p.v['route'], 'note')                           # no turn worded by the model: nothing can be proposed
+        self.assertTrue(p.st['lead'].startswith('I do not have that information.'), p.st['lead'])
+        self.assertNotIn('make this payment', p.st['lead'])
+        # the one close that still waits a turn (a scam answer only the model can word), with a transfer request or
+        # silence during it: tests/logic/test_terminal_questions.py
 
 
 class R8DurablePromiseFlag(unittest.TestCase):

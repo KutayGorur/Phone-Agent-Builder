@@ -623,6 +623,34 @@ def reask(st, lead='', kind='question', then=True):
     ask((lead + ' ' if lead else '') + ans)
 
 
+def sentence(text):
+    t = str(text or '').strip()
+    if not t:
+        return ''
+    return t[0].upper() + t[1:] + ('' if t[-1] in '.!?' else '.')
+
+
+def fixed_answer(st, qk):
+    """The answer to a question once nothing more is to be asked (support on offer, or the call is closing). Spoken word
+    for word: the speaking model words nothing here, so it cannot add an amount, a date or an offer of its own.
+    None = only the model can word it (a scam answer the brief gives as an instruction rather than a sentence)."""
+    if qk == 'ai':
+        return sentence(E['ai_say'])
+    if qk == 'scam':
+        s = str(E['scam_say'] or '').strip()
+        return sentence(s) if s.lower().startswith(('you can ', 'you may ')) else None
+    if qk == 'amount' and st.get('prods'):
+        return ' '.join('Your %s is %s %s and %d days %s.' % (plain_label(p['label']), say_money(p['pd']), E['pd_word'], p['dl'], E['days_word'])
+                        for p in st['prods'])
+    return sentence(E['unknown_say'])
+
+
+def scam_only(then=''):
+    return ('The customer asked whether this call is genuine. Reply in one short sentence: ' + str(E['scam_say']) +
+            '. Add no amount, no date and no offer of your own.' +
+            (' Then say exactly this, word for word: ' + then if then else ' Ask nothing.'))
+
+
 # ------------------------------------------------------------------ closing
 
 def set_close(outcome, reason, text):
@@ -1051,7 +1079,13 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
         return False
     if it in ('question', 'none') and not st.get('hard_reasked'):
         st['hard_reasked'] = True                 # the transfer is offered once: a question is answered without repeating it,
-        reask(st, then=(it == 'none'))            # and a second non-answer ("no, but can you...") counts as declining
+        asked = it == 'question' or ASKED['q']    # and a second non-answer ("no, but can you...") counts as declining
+        ans = fixed_answer(st, ASKED['k']) if asked else ''
+        ASKED['q'] = False                        # answered here
+        if ans is None:
+            ask(scam_only())
+        else:                                     # fixed lines only: after hardship the model words no reply of its own
+            speak(((ans or '') + ' ' + ('' if it == 'question' else hardship_offer_text())).strip())
         return True
     dec = I.get('on_decline') or {}
     st['hard_pending'] = False
@@ -1068,9 +1102,14 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
 
 # ------------------------------------------------------------------ the turns
 
+ASKED = {'q': False, 'k': ''}                       # this turn's question, for the replies that are spoken as fixed lines
+
+
 def turn(st):
     q = S('x_q').lower()
     vars['x_q'] = 'no'
+    ASKED['q'], ASKED['k'] = q == 'yes', S('x_qk').lower()
+    vars['x_qk'] = 'none'
     if S('x_intent').lower() == 'agree' and (S('x_date') or S('x_amount')) and st['phase'] in ('nego', 'confirm'):
         vars['x_intent'] = 'change'               # "yes, but Friday": the correction comes first, nothing is recorded on the old terms
     if q == 'yes' and st['phase'] == 'confirm' and S('x_intent').lower() == 'agree':
@@ -1079,12 +1118,23 @@ def turn(st):
         vars['x_intent'] = 'none'
         return reask(st, 'The customer said yes but also asked something. Answer that first; do not record anything yet.')
     turn_inner(st)
-    if q == 'yes' and vars.get('route') in ('fin', 'note') and not st.get('transfer'):
-        st['defer'] = vars['route']                # answer first; the close follows on the next turn
-        reask(st, 'The customer also asked a question before the call ends. Answer it, then ask nothing further.', then=False)
+    if not ASKED['q']:                             # no question, or it was answered with a fixed line already
         return
-    if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text'):
+    if vars.get('route') in ('fin', 'note') and not st.get('transfer'):
+        ans = fixed_answer(st, ASKED['k'])         # the call is ending: the answer is a fixed line in front of the closing,
+        if ans is None:                            # never a turn the model words (it has proposed a payment there)
+            st['defer'] = vars['route']
+            return ask(scam_only())
+        if vars['route'] == 'fin':
+            vars['bye_text'] = ans + ' ' + S('bye_text')
+        else:
+            st['lead'] = (ans + ' ' + st.get('lead', '')).strip()
+        return
+    if vars.get('route') == 'say' and vars.get('say_text'):
         core = vars['say_text']
+        if st.get('nopers'):                       # after hardship the answer is a fixed line as well
+            ans = fixed_answer(st, ASKED['k'])
+            return ask(scam_only(core)) if ans is None else speak(ans + ' ' + core)
         ask('The customer also asked a question. First answer it in one short sentence, using only these facts: ' + facts(st, hide_floor=True) +
             '. If the facts do not answer it, say exactly "' + E['unknown_say'] + '". If they ask whether you are a robot or an AI, say "' +
             E['ai_say'] + '". If they ask whether this call is a scam, say that ' + E['scam_say'] +
