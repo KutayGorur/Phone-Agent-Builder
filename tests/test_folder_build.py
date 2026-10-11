@@ -3,6 +3,16 @@ from builder.folder_build import choose_documents, origin, validate_plan, workfl
 
 
 class FolderCompilerTests(unittest.TestCase):
+    def test_live_flattened_api_mapping_reconstructs_arrays_and_clears_stale_aliases(self):
+        api={'type':'function','function':{'handler':'__function__:api_call'}}
+        workflow={'nodes':{'lookup':{'pre_actions':[api],'response_mapping':[{'path':'data.items','variable':'items'},{'path':'data.result.code','variable':'code'}],'transitions':[{'target_node':'next','condition':{'operator':'always'}}]}}}
+        compatible=platform_compatible_workflow(workflow)
+        self.assertEqual(compatible,platform_compatible_workflow(compatible))
+        self.assertEqual(compatible['nodes']['lookup']['transitions'][0]['target_node'],'lookup_mapped_result')
+        self.assertEqual(compatible['nodes']['lookup_mapped_result']['transitions'],workflow['nodes']['lookup']['transitions'])
+        result={'workflow':compatible,'tests':[{'name':'real flattened response','node':'lookup_mapped_result','vars':{'lookup_response.data.items.0.id':'masked','lookup_response.data.items.0.primary':'true','lookup_response.data.result.code':'1'},'expect_vars':{'items':'[{"id": "masked", "primary": true}]','code':'1'}},{'name':'missing result cannot reuse old alias','node':'lookup_mapped_result','vars':{'items':'old','code':'1'},'expect_vars':{'items':'','code':''}}]}
+        self.assertIn('PASS 2',run_vectors(result))
+
     def test_platform_loop_compatibility_preserves_both_prompts_and_original(self):
         original={'nodes':{'choose':{'task_message':'Initial question','loop_prompt':'Short retry'}},'global_nodes':{'guard':{'task_message':'Initial guard','loop_prompt':'Repeat guard'}}}
         result=platform_compatible_workflow(original)

@@ -40,6 +40,55 @@ def platform_compatible_workflow(workflow):
                 node['task_message']=('Current user turns since entering this node: '+count+'. '
                     'On entry, before the caller answers this node (zero turns), use these instructions:\n'+first+
                     '\nIf still in this node after a caller answer (one or more turns), use these instructions instead:\n'+loop)
+    # Live pre-action results are flattened, but node-level mappings can be
+    # silently absent. Materialize the declared mappings before routing.
+    nodes=result.get('nodes',{})
+    for name,node in list(nodes.items()):
+        mappings=node.get('response_mapping') or []
+        if not mappings or not any(t['function'].get('handler')=='__function__:api_call'
+                                   for t in functions(node.get('pre_actions') or [])):
+            continue
+        bridge=name+'_mapped_result'
+        if bridge in nodes:
+            continue
+        code="import json\n"+"mapping_rows="+repr(mappings)+"\nresponse_prefix="+repr(name+'_response.')+"\n"+'''def mapped_value(path):
+    key=response_prefix+path
+    if key in vars:
+        return vars.get(key)
+    root=dict()
+    for flat,value in list(vars.items()):
+        if not flat.startswith(key+'.'):
+            continue
+        parts=flat[len(key)+1:].split('.')
+        current=root
+        for part in parts[:-1]:
+            if part not in current:
+                current[part]=dict()
+            current=current[part]
+        if value=='true': value=True
+        elif value=='false': value=False
+        elif value=='null': value=None
+        current[parts[-1]]=value
+    def restore(value):
+        if not isinstance(value,dict): return value
+        if value and all(k.isdigit() for k in value):
+            return [restore(value.get(str(i))) for i in range(max(int(k) for k in value)+1)]
+        return dict((k,restore(v)) for k,v in value.items())
+    return restore(root) if root else None
+for row in mapping_rows:
+    value=mapped_value(row['path'])
+    vars[row['variable']]=json.dumps(value,ensure_ascii=False) if isinstance(value,(dict,list)) else ('' if value is None else value)
+'''
+        nodes[bridge]={'name':bridge,'node_type':'code','passthrough':True,
+            'on_enter':{'type':'silent'},'pre_actions':[{'type':'function','function':{
+                'name':'code_exec','handler':'__function__:code_exec','parameters':{
+                    'type':'object','properties':{'code':{'type':'string','default':code},
+                    'timeout_ms':{'type':'number','default':10000}}}}}],
+            'transitions':node.get('transitions',[])}
+        if 'passthrough_default_transition' in node:
+            nodes[bridge]['passthrough_default_transition']=node['passthrough_default_transition']
+            node['passthrough_default_transition']=bridge
+        node['transitions']=[{'target_node':bridge,'condition':{'operator':'always'},'description':'materialize API response mappings'}]
     return result
 
 
