@@ -291,6 +291,47 @@ AMOUNT_PRE = ("\ntry:\n    b = config.get('body')\n    if isinstance(b, dict) an
 
 # ------------------------------------------------------------------ the workflow
 
+# ------------------------------------------------------------------ extra rules that repeat generated lines
+
+_WORD = re.compile(r"[a-z0-9']+")
+
+
+def _words(text):
+    return set(_WORD.findall(str(text).lower()))
+
+
+def _strings_of(node, out=None):
+    """Every sentence-sized string inside a config structure (engine config, node tasks, spoken lines)."""
+    out = [] if out is None else out
+    if isinstance(node, str):
+        for part in re.split(r'(?<=[.!?])\s+|\n+', node):
+            if len(part.split()) >= 4:
+                out.append(part)
+    elif isinstance(node, dict):
+        for v in node.values():
+            _strings_of(v, out)
+    elif isinstance(node, (list, tuple)):
+        for v in node:
+            _strings_of(v, out)
+    return out
+
+
+def drop_duplicate_rules(rules, generated, threshold=0.75):
+    """-> (kept, dropped). A rule is dropped when more than `threshold` of its words occur in one generated line (or an earlier kept
+    rule), that line being no more than about twice as long as the rule (a long sentence that merely contains the
+    rule's words is not a repeat), and every number in it does too. Short rules (under 4 words) are always kept."""
+    gen = [_words(g) for g in generated]
+    kept, dropped = [], []
+    for r in rules:
+        w = _words(r)
+        nums = {x for x in w if any(c.isdigit() for c in x)}
+        dup = len(w) >= 4 and any(len(w & g) / len(w) > threshold and len(w & g) / len(g) > 0.5 and nums <= g for g in gen)
+        (dropped if dup else kept).append(r)
+        if not dup:
+            gen.append(w)                  # a later rule that repeats an earlier extra rule goes too
+    return kept, dropped
+
+
 def generate(spec):
     global BASE
     spec, shape_notes = sanitize_spec(spec)
@@ -318,11 +359,13 @@ def generate(spec):
         'If you cannot answer a question, say "%s".' % E['unknown_say'],
         'Never offer a discount, a waiver, an instalment plan or any term that is not part of your instructions.',
     ]
+    generated_rules = list(rules)
+    extra_texts = []
     for r in spec.get('extra_rules') or []:
         t = r.get('text') if isinstance(r, dict) else str(r)
         if t:
-            rules.append(t)
-    system_prompt = '\n'.join('- ' + r for r in rules)
+            extra_texts.append(t)
+    system_prompt = '\n'.join('- ' + r for r in rules + extra_texts)     # rebuilt without duplicates once the nodes exist
 
     confirm_q = (op.get('confirm_identity_question') or 'Am I speaking with {title} {last_name}?').replace('{', '{{').replace('}', '}}')
     opening_text = first_sentence(spec) + ' ' + confirm_q
@@ -526,6 +569,11 @@ def generate(spec):
     nodes['do_close'] = api_node('do_close', 'close_call', {'outcome': ('string', '{{close_outcome}}'), 'reason': ('string', '{{close_reason}}')}, 'hangup',
                                  pre=None, retries=1, on_enter={'type': 'tts', 'text': '{{bye_text}}'})
     nodes['hangup'] = end_node('hangup', 'call_closed')
+
+    kept, dropped = drop_duplicate_rules(extra_texts, generated_rules + _strings_of(E) + _strings_of(nodes))
+    for d in dropped:
+        LAST_WARNINGS.append('extra rule left out of the system prompt, the compiler already says it: %s' % d[:100])
+    system_prompt = '\n'.join('- ' + r for r in generated_rules + kept)
 
     test_vars = {'customer_id': 'c_test', 'first_name': 'Test', 'last_name': 'Customer', 'title': 'Mr', 'now': '2026-10-14T11:00'}
     return {'initial_node': 'opening', 'system_prompt': system_prompt, 'test_variables': test_vars, 'global_nodes': {}, 'nodes': nodes}
