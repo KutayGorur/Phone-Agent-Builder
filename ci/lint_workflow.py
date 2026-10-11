@@ -13,6 +13,20 @@ sys.path.insert(0, str(ROOT))
 VAR = re.compile(r"\{\{\s*([A-Za-z_][\w.]*)\s*\}\}")
 
 
+def workflow_definition(document):
+    """Read both generated definitions and Freya exports without mutating either.
+
+    A published export carries platform-added agent configuration. Validate
+    its graph as builder input while leaving the actual export untouched.
+    """
+    if isinstance(document.get('workflow'), dict):
+        workflow = dict(document['workflow'])
+        if document.get('workflow_id'):
+            workflow.pop('agent_config', None)
+        return workflow
+    return document
+
+
 def lint(wf, openapi=None):
     errs, warns = [], []
     nodes = wf.get("nodes") or {}
@@ -96,8 +110,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     wf = json.load(open(a.workflow, encoding="utf-8"))
-    if set(wf) == {"workflow"}:  # export / dry-run envelope
-        wf = wf["workflow"]
+    wf = workflow_definition(wf)
     errs, warns = lint(wf, json.load(open(a.openapi, encoding="utf-8")) if a.openapi else None)
     for w in warns:
         print("WARN", w)

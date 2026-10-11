@@ -36,7 +36,7 @@ class FolderCompilerTests(unittest.TestCase):
             validate_plan(plan,[{'source':'rules.md'}])
 
     def test_missing_nested_request_field_and_wrong_origin_are_blocked(self):
-        f = {'type':'function','function':{'name':'send','handler':'__function__:api_call','config':{'timeoutMs':30000,'maxRetries':0},'parameters':{'properties':{'url':{'default':'https://other.example/send'},'method':{'default':'POST'},'body':{'properties':{'data':{'properties':{'wrong':{'default':'x'}}}}}}}}}
+        f = {'type':'function','config':{'timeoutMs':30000,'maxRetries':0},'function':{'name':'send','handler':'__function__:api_call','parameters':{'properties':{'url':{'default':'https://other.example/send'},'method':{'default':'POST'},'body':{'properties':{'data':{'properties':{'wrong':{'default':'x'}}}}}}}}}
         wf = {'initial_node':'start','nodes':{'start':{'node_type':'conversation','tools':[f],'transitions':[]}}}
         plan = {'services':[{'path':'/send','method':'POST','required_request_fields':['data.item']}]}
         errors,_ = workflow_problems(wf,plan,'https://bank.example')
@@ -45,6 +45,8 @@ class FolderCompilerTests(unittest.TestCase):
         f['function']['parameters']['properties']['url']['default'] = 'https://bank.example/send'
         f['function']['parameters']['properties']['body']['properties']['data']['properties']['item'] = {'default':'{{selected}}'}
         self.assertEqual(workflow_problems(wf,plan,'https://bank.example')[0], [])
+        f['function']['config']=f.pop('config')
+        self.assertTrue(any('timeout' in e for e in workflow_problems(wf,plan,'https://bank.example')[0]))
 
 
 if __name__ == '__main__':

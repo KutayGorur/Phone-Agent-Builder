@@ -46,15 +46,42 @@ def check(stem, wf, tr):
     return errs, warns
 
 
+def source_manifest(team, members, repo, command, mock_url, workflow, trace_text, workflow_path, trace_path):
+    """Build the folder-task manifest from a successful run, not packaging HEAD."""
+    if not team or team.startswith('<') or not members or any(not m.get('name') or '@' not in m.get('email','') for m in members):
+        raise ValueError('provide the actual team name and member names/emails')
+    if '{case_folder}' not in command:
+        raise ValueError('run_command must include {case_folder}')
+    if not mock_url.startswith('https://'):
+        raise ValueError('mock_url must be the persistent HTTPS deployment')
+    if not re.search(r'\[END\].*status=ok', trace_text):
+        raise ValueError('the source build did not finish successfully')
+    revision = re.search(r'\[START\].*build_commit=([0-9a-f]{40})', trace_text)
+    if not revision:
+        raise ValueError('folder trace does not identify the commit that ran')
+    if not workflow.get('workflow_id') or not isinstance(workflow.get('workflow'),dict):
+        raise ValueError('workflow must be a real platform export')
+    if 'workflow_id='+workflow['workflow_id'] not in trace_text:
+        raise ValueError('export and build trace refer to different workflows')
+    return {'team':team,'members':members,'repo':repo,'commit':revision.group(1),
+            'run_command':command,'workflow':workflow_path,'trace':trace_path,'mock_url':mock_url}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("stems", nargs="+")
     ap.add_argument("--out", default="out"); ap.add_argument("--traces", default="traces"); ap.add_argument("--dest", default="submission")
     ap.add_argument("--team", default="<team name>")
     ap.add_argument("--repo", help="override repo URL (default: git remote origin)")
+    ap.add_argument("--manifest", action="store_true", help="create the document-folder submission.json and include complete model transcript")
+    ap.add_argument("--members-file", help="JSON list of actual member name/email objects")
+    ap.add_argument("--mock-url", help="persistent mock deployment URL")
+    ap.add_argument("--run-command", help="folder build command, including literal {case_folder}")
     ap.add_argument("--apply", action="store_true", help="copy and git add -f (default is a dry run)")
     ap.add_argument("--commit", action="store_true", help="with --apply: commit the files (no push)")
     a = ap.parse_args()
+    if a.manifest and (len(a.stems) != 1 or not a.members_file or not a.mock_url or not a.run_command):
+        ap.error('--manifest needs one stem, --members-file, --mock-url and --run-command')
     out, tdir, dest = ROOT / a.out, ROOT / a.traces, ROOT / a.dest
     plan, bad = [], False
     for stem in a.stems:
@@ -64,14 +91,37 @@ def main():
         for m in warns: print(f"WARN  [{stem}] {m}")
         plan.append((stem, wf, tr, dest / f"{stem}.workflow.json", dest / "traces" / f"{stem}.log"))
     if bad: print("\nFix the errors above first. Nothing copied."); sys.exit(1)
+    manifest = None
+    if a.manifest:
+        stem,wf,tr,dwf,dtr=plan[0]
+        model_log=tr.with_name(tr.name.replace('.trace.txt','.model.jsonl'))
+        if not model_log.exists():
+            ap.error('missing complete model request/response transcript: '+str(model_log))
+        repo=a.repo or git('remote','get-url','origin')
+        repo=re.sub(r':\/\/[^@/]*@', '://', repo)
+        members=json.loads(Path(a.members_file).read_text(encoding='utf-8-sig'))
+        manifest=source_manifest(a.team,members,repo,a.run_command,a.mock_url,
+            json.loads(wf.read_text(encoding='utf-8')),tr.read_text(encoding='utf-8'),
+            dwf.relative_to(ROOT).as_posix(),dtr.relative_to(ROOT).as_posix())
+        model_text=model_log.read_text(encoding='utf-8')
+        if trace_mod.redact(model_text)!=model_text:
+            ap.error('model transcript contains unredacted credentials')
+        print(json.dumps(manifest,ensure_ascii=False,indent=2))
     for stem, wf, tr, dwf, dtr in plan:
         print(f"{'copy' if a.apply else 'would copy'}: {wf.relative_to(ROOT)} -> {dwf.relative_to(ROOT)} ; {tr.relative_to(ROOT)} -> {dtr.relative_to(ROOT)}")
         if a.apply:
             dtr.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(wf, dwf); shutil.copyfile(tr, dtr)
+            if a.manifest:
+                with dtr.open('a',encoding='utf-8') as log:
+                    log.write('\n--- Complete builder model session (requests and responses) ---\n'+model_text)
             git("add", "-f", str(dwf), str(dtr))
+    if manifest and a.apply:
+        manifest_path=dest/'submission.json'
+        manifest_path.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        git('add','-f',str(manifest_path))
     if a.apply and a.commit:
-        git("commit", "-m", "Submission: workflow exports and traces for " + ", ".join(a.stems), "--", *[str(p) for _, _, _, x, y in plan for p in (x, y)])
+        git("commit", "-m", "Submission: workflow exports and traces for " + ", ".join(a.stems), "--", *[str(p) for _, _, _, x, y in plan for p in (x, y)], *([str(manifest_path)] if manifest else []))
         print("committed (not pushed). Push before sending the form.")
     commit = git("rev-parse", "HEAD")
     if not (a.apply and a.commit):

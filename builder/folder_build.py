@@ -125,6 +125,11 @@ def workflow_problems(workflow, plan, mock_url):
         errors.append('fixture defaults must not replace live call variables')
     api = {s['path']: s for s in plan.get('services', [])}
     seen = set()
+    for name, node in {**workflow.get('nodes',{}), **workflow.get('global_nodes',{})}.items():
+        if node.get('node_type') == 'conversation' and node.get('pre_actions'):
+            errors.append('conversation pre_actions would be stripped by Freya: ' + name)
+        if node.get('node_type') in {'api_request','code'} and node.get('tools'):
+            errors.append('action-node tools would be stripped by Freya: ' + name)
     for tool in functions(workflow):
         f = tool['function']
         props = (f.get('parameters') or {}).get('properties', {})
@@ -148,7 +153,7 @@ def workflow_problems(workflow, plan, mock_url):
                     leaf = leaf.get('properties', {}).get(part, {})
                 if not leaf:
                     errors.append('missing request field %s in %s' % (field, parsed.path))
-            config = f.get('config', {})
+            config = tool.get('config', {})
             if config.get('maxRetries', 0) != 0 or props.get('connect_retries', {}).get('default', 0) != 0:
                 errors.append('automatic API retries can duplicate a side effect: ' + parsed.path)
             if config.get('timeoutMs', 0) < 30000:
