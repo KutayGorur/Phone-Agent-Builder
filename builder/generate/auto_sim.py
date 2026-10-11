@@ -397,7 +397,9 @@ def scenarios(spec, E, tools, api_ok=True):
     nxt = sl.next_bd(now0, cal)
     if nxt and cb_lo is not None and cb_hi is not None and tpe['on_scheduled'].get('outcome'):
         good = _hhmm(min(cb_lo + 120, cb_hi))
-        bad_t = _hhmm(cb_lo - 120) if cb_lo >= 180 else _hhmm(min(cb_hi + 120, 23 * 60 + 30))
+        late_bad = min(cb_hi + 120, 23 * 60 + 30)
+        # a time after the window is unambiguous only on a 24-hour reading (hour 13 or later); an early hour such as 07:00 can be read as 19:00
+        bad_t = _hhmm(late_bad) if (late_bad > cb_hi and late_bad // 60 >= 13) else (_hhmm(cb_lo - 120) if cb_lo >= 180 else _hhmm(late_bad))
         def sched(E_, led, case):
             p = eq(tpe['on_scheduled']['outcome'], tpe['on_scheduled']['reason'], label='callback')(E_, led, case)
             return p + ([] if len(led.get('callbacks') or []) == 1 else ['expected one callback on record'])

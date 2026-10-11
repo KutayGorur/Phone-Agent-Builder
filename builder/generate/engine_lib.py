@@ -1402,17 +1402,18 @@ def idv_event(st):
 
 
 def cb_check(d, m, today):
-    """check_callback with support for 'today_or_next_N_business_days'."""
+    """check_callback with support for 'today_or_next_N_business_days' and 'next_N_business_days' (N from the spec, any N)."""
     days = str(CAL.get('cb_days') or '')
-    mm = re.search(r'next_(\w+?)_business_days', days)
+    mm = re.search(r'next_(\d+)_business_days', days)
     if not mm:
         return check_callback(iso(d), fmt_time(m), today, now_min(), CAL)
-    dg = digitize(mm.group(1).replace('_', ' '))
-    n = int(dg) if dg.isdigit() else 2
+    n = int(mm.group(1))
     cfg = dict(CAL)
-    cfg['cb_days'] = 'any_business_day'
+    cfg['cb_days'] = 'any_day'
     s, dd, mm2 = check_callback(iso(d), fmt_time(m), today, now_min(), cfg)
-    if s == 'ok' and d != today and d > (add_bd(today, n, CAL) or today):
+    limit = add_bd(today, n, CAL) or today
+    day_ok = (d == today and days.startswith('today')) or (d > today and is_bd(d, CAL) and d <= limit)
+    if not day_ok and s in ('ok', 'out_of_window', 'not_after_now'):
         s = 'bad_day'
     return s, dd, mm2
 

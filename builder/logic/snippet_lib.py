@@ -277,6 +277,8 @@ def check_callback(date_text, time_text, today, now_min, cfg):
         day_ok = d == next_bd(today, cfg)
     elif days == 'any_business_day':
         day_ok = d >= today and is_bd(d, cfg)
+    elif days == 'any_day':          # the caller (engine cb_check) applies its own day rule
+        day_ok = d >= today
     else:
         day_ok = d == today or d == next_bd(today, cfg)
     if not day_ok:

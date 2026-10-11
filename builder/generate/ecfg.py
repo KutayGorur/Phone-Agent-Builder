@@ -371,8 +371,42 @@ def amount_fields(spec, items, f_pd, f_days, floor_field, warns):
     return pd_map, days_map
 
 
+_NUMW = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10}
+
+
+def canon_cb_days(v, warns=None):
+    """Callback day rule from any spelling -> 'today' | 'next_business_day' | 'today_or_next_business_day' |
+    'today_or_next_N_business_days' | 'next_N_business_days' (N >= 2). Business and working days are the same.
+    Unreadable text keeps the default (today or the next business day) and warns."""
+    if v in (None, ''):
+        return v
+    t = re.sub(r'[\s_\-]+', ' ', _s(v).lower()).strip()
+    m = re.search(r'next (\d+|' + '|'.join(_NUMW) + r')\b', t)
+    n = int(m.group(1)) if m and m.group(1).isdigit() else (_NUMW.get(m.group(1)) if m else None)
+    today = 'today' in t
+    if n and n >= 2:
+        return ('today_or_' if today else '') + 'next_%d_business_days' % n
+    if 'any business day' in t or 'any working day' in t:
+        return 'any_business_day'
+    if re.search(r'next (business|working) day', t) or t in ('next business day', 'next day'):
+        return 'today_or_next_business_day' if today else 'next_business_day'
+    if t == 'today' or t in ('same day', 'same business day'):
+        return 'today'
+    if warns is not None:
+        warns.append('callback.allowed_days %r is not a known rule: today or the next business day is used' % (v,))
+    return 'today_or_next_business_day'
+
+
+def _day_phrase(cb_days):
+    m = re.fullmatch(r'(today_or_)?next_(\d+)_business_days', _s(cb_days))
+    if m:
+        return ('today or ' if m.group(1) else '') + 'the next %s business days' % m.group(2)
+    return {'today': 'today', 'next_business_day': 'the next business day', 'any_business_day': 'any business day'}.get(_s(cb_days), 'today or the next business day')
+
+
 def _build(spec, warns_out):
     cal = config_from_spec(spec)
+    cal['cb_days'] = canon_cb_days(cal.get('cb_days'), cal.get('warnings'))
     meta = spec.get('meta') or {}
     mp = spec.get('multi_product')
     opening = spec.get('opening') or {}
@@ -565,7 +599,7 @@ def _build(spec, warns_out):
                'wrong_number_say': 'I am sorry for the disturbance. ' + goodbye,
                'deceased_say': (dec.get('say') or 'I am sorry for your loss.') + ' ' + goodbye,
                'failed_say': 'Thank you. We will try to reach them another time. Goodbye.',
-               'window_text': ('today or the next business day between %s and %s' % bt) if all(bt) else 'at another time',
+               'window_text': ('%s between %s and %s' % ((_day_phrase(cal.get('cb_days')),) + tuple(bt))) if all(bt) else 'at another time',
                'max_bad': cb.get('max_out_of_window_asks') if cb.get('max_out_of_window_asks') is not None else 1},
         'hard': next((k for k, v in intents.items() if v.get('kind') == 'offer'), None),
         'human': next((k for k, v in intents.items() if v.get('kind') == 'transfer' and v.get('ask_first')), None),
@@ -599,7 +633,7 @@ def _ack_scope(conf, warns):
 
 # Warnings that mean the compiler substituted a guess for a mandatory meaning (as opposed to a field it ignores or a
 # harmless fallback). The build labels such a spec degraded.
-BLOCKING_MARKS = ('has no amount field', 'could not be read: the floor',
+BLOCKING_MARKS = ('has no amount field', 'is not a known rule: today or', 'could not be read: the floor',
                   ' dropped: ',   # a malformed spec section the compiler had to drop (a coerced one is only a warning)
                   'is not a known date rule', 'could be the promise outcome', 'no outcome without reasons',
                   'is mapped to two roles', 'taken from the text of "when"')
