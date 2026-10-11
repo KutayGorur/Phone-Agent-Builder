@@ -407,7 +407,7 @@ def generate(spec):
     ivars = ['say_text', 'x_date', 'x_amount', 'x_product', 'tp_date', 'tp_time', 'idv_note',
              'instruction', 'route', 'bye_text', 'close_outcome', 'promise_recorded', 'cp_ok', 'nt_ok', 'cb_ok', 'tr_ok', 'tr_queue', 'tr_text', 'st']
     ivars += ['idq%d_state' % (i + 1) for i in range(n)]
-    enum_init = 'vars["x_intent"] = "none"\nvars["x_stance"] = "other"\nvars["tp_event"] = "other"\nvars["x_q"] = "no"\n'
+    enum_init = 'vars["x_intent"] = "none"\nvars["x_stance"] = "other"\nvars["tp_event"] = "other"\nvars["x_q"] = "no"\nvars["x_question_kind"] = "unknown"\n'
     nodes['init'] = code_node('init', enum_init + ''.join('vars[%s] = \'\'\n' % lit(v) for v in ivars), [tr('idq_1' if n else 'get_account')])
     nodes['to_tp'] = code_node('to_tp', 'vars["tp_event"] = "other"\n' + ''.join('vars[%s] = \'\'\n' % lit(v) for v in ('tp_date', 'tp_time', 'instruction', 'route')) +
                                'vars["st"] = \'{"phase": "tp"}\'\n', [tr('third_party')])
@@ -527,6 +527,7 @@ def generate(spec):
               ext('x_amount', 'The amount of money the customer says they can pay, as said (digits or words). Join pieces said in several messages; use the '
                   'corrected value if they corrected themselves. Empty if none.')]
     sm_ext.append(ext('x_q', "yes if the customer's last message contains a question of any kind (for example whether you are a robot, whether this is a scam, why, what, how much), even when it also contains an answer; otherwise no.", ['yes', 'no']))
+    sm_ext.append(ext('x_question_kind', "Classify only the question in the customer's LAST message: ai = whether you are an AI/robot; scam = whether the call is genuine or how to verify it; balance = the existing past-due balance/days late; deadline = the latest date the policy permits. Discount, waiver, payment-plan requests and any other question are unknown. Do not classify a volunteered payment date/amount as a question about balance/deadline. Unknown if no question.", ['ai', 'scam', 'balance', 'deadline', 'unknown']))
     if E['use_notes'] or meta.get('multi_product'):
         sm_ext.append(ext('x_product', 'Which product the customer is talking about, if they name one (e.g. "credit card", "personal loan", "car loan"), or '
                           '"all" if they mean everything / both / all of them. Empty if not clear.'))

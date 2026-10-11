@@ -97,7 +97,10 @@ class R3Confirmation(unittest.TestCase):
         p.say('agree', date='Friday', q='yes')
         self.assertNotEqual(p.v['route'], 'create')
         self.assertEqual(p.prod(0)['date'], '2026-10-16')
-        self.assertEqual(p.v['route'], 'ask')
+        self.assertEqual(p.v['route'], 'say')
+        self.assertIn('Friday 16 October', p.text)
+        p.say('agree')
+        self.assertEqual((p.v['route'], p.v['cp_date']), ('create', '2026-10-16'))
 
     def test_r3_yes_but_other_amount(self):
         p = self._readback()
@@ -188,10 +191,10 @@ class R7Interruptions(unittest.TestCase):
     def test_r7_close_question_gets_an_answer_without_negotiation_text(self):
         p = Probe(products=(PERSONAL,))
         p.say('sp_already_paid', q='yes')
-        self.assertEqual(p.v['route'], 'ask')
-        self.assertIn('ask nothing further', p.v['instruction'])
-        self.assertNotIn('Then say', p.v['instruction'])
-        self.assertNotIn('make this payment', p.v['instruction'])
+        self.assertEqual(p.v['route'], 'say')
+        self.assertIn('I do not have that information', p.v['say_text'])
+        self.assertNotIn('Then say', p.v['say_text'])
+        self.assertNotIn('make this payment', p.v['say_text'])
 
     def test_r7_transfer_request_while_the_close_waits(self):
         p = Probe(products=(PERSONAL,))

@@ -301,7 +301,9 @@ class Termination(unittest.TestCase):
         p = Probe().say('agree')
         p.say('sp_does_not_want_to_talk')
         p.say('sp_does_not_want_to_talk', q='yes')
-        self.assertEqual(p.v['route'], 'ask')
+        self.assertEqual(p.v['route'], 'say')
+        self.assertEqual(p.text, 'I do not have that information.')
+        self.assertEqual(p.st['defer'], 'note')
         p.say('none')                                                    # whatever they say next, the close follows
         self.assertEqual(p.v['route'], 'note')
 

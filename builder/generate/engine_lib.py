@@ -603,9 +603,33 @@ def cur_question(st):
     return offer_q(st, p) or E['first_q']
 
 
+def bounded_question_answer(st):
+    """Account facts or a brief-defined answer, never a generated payment proposal."""
+    kind = st.get('question_kind')
+    if kind == 'ai':
+        text = E['ai_say']
+    elif kind == 'scam':
+        text = E['scam_say']
+    elif kind == 'balance' and st.get('prods'):
+        text = '; '.join('%s: %s %s, %d days %s' %
+                         (p['label'], say_money(p['pd']), E['pd_word'], p['dl'], E['days_word']) for p in st['prods'])
+    elif kind == 'deadline' and st.get('prods') and all(p.get('dead') for p in st['prods']):
+        text = '; '.join('The latest promise date for %s is %s' %
+                         (p['label'], dstr(from_iso(p['dead']))) for p in st['prods'])
+    else:
+        text = E['unknown_say']
+    text = str(text or '').strip()
+    return text + ('' if text.endswith(('.', '?', '!')) else '.')
+
+
 def reask(st, lead='', kind='question', then=True):
     """The customer said something that needs no policy change: answer it and ask the pending question again."""
     q = cur_question(st)
+    if st.get('hard_pending') or st.get('nopers'):
+        # A negative instruction did not prevent a real PUB-05 repayment offer.
+        # Keep hardship answers and any permitted pending readback in fixed TTS.
+        st['question_answered'] = True
+        return speak(bounded_question_answer(st) + (' ' + q if then else ''))
     offered = False
     if not st.get('hard_pending') and st['phase'] != 'confirm' and not st['all']:
         pe = st['prods'][st['cur']].get('pend')
@@ -1071,6 +1095,9 @@ def hardship_reply(st, it, dt, am, pref, scope_all):
 def turn(st):
     q = S('x_q').lower()
     vars['x_q'] = 'no'
+    st['question_kind'] = S('x_question_kind').lower() if q == 'yes' else 'unknown'
+    st['question_answered'] = False
+    vars['x_question_kind'] = 'unknown'
     if S('x_intent').lower() == 'agree' and (S('x_date') or S('x_amount')) and st['phase'] in ('nego', 'confirm'):
         vars['x_intent'] = 'change'               # "yes, but Friday": the correction comes first, nothing is recorded on the old terms
     if q == 'yes' and st['phase'] == 'confirm' and S('x_intent').lower() == 'agree':
@@ -1081,14 +1108,11 @@ def turn(st):
     turn_inner(st)
     if q == 'yes' and vars.get('route') in ('fin', 'note') and not st.get('transfer'):
         st['defer'] = vars['route']                # answer first; the close follows on the next turn
-        reask(st, 'The customer also asked a question before the call ends. Answer it, then ask nothing further.', then=False)
+        speak(bounded_question_answer(st))         # fixed TTS; preserve the pending close and transfer interruption
         return
-    if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text'):
+    if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text') and not st.get('question_answered'):
         core = vars['say_text']
-        ask('The customer also asked a question. First answer it in one short sentence, using only these facts: ' + facts(st, hide_floor=True) +
-            '. If the facts do not answer it, say exactly "' + E['unknown_say'] + '". If they ask whether you are a robot or an AI, say "' +
-            E['ai_say'] + '". If they ask whether this call is a scam, say that ' + E['scam_say'] +
-            '. Never invent figures, dates or reasons. Then say exactly this, word for word: ' + core)
+        speak(bounded_question_answer(st) + ' ' + core)
 
 
 def turn_inner(st):
