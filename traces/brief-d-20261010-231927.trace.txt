@@ -1,0 +1,26 @@
+2026-10-10 23:19:27 +     0s [START] briefs=test-briefs/brief-d.md tool_api=test-briefs/tools-d.openapi.json budget_s=1619 selftest=False
+2026-10-10 23:19:27 +     0s [STAGE] parse
+2026-10-10 23:19:27 +     0s [INFO] parse: 88 units from 1 file(s); tool API has 7 tools
+2026-10-10 23:19:27 +     0s [MODEL] model=claude-opus-5-5 purpose=parse brief: spec sections meta, call_variables, opening, third_party, identity, debt_statement backend=cli prompt_chars=16450
+2026-10-10 23:19:27 +     0s [MODEL] model=claude-opus-5-5 purpose=parse brief: spec sections calendar, bands, dates, amounts, persuasion, confirmation backend=cli prompt_chars=16505
+2026-10-10 23:19:27 +     0s [MODEL] model=claude-opus-5-5 purpose=parse brief: spec sections intents, multi_product, closing backend=cli prompt_chars=16331
+2026-10-10 23:20:08 +    41s [INFO] model call done in 41s: parse brief: spec sections meta, call_variables, opening, third_party, identity, debt_statement (8069 chars)
+2026-10-10 23:20:09 +    42s [INFO] model call done in 42s: parse brief: spec sections calendar, bands, dates, amounts, persuasion, confirmation (8959 chars)
+2026-10-10 23:20:16 +    50s [INFO] model call done in 50s: parse brief: spec sections intents, multi_product, closing (10207 chars)
+2026-10-10 23:20:16 +    50s [INFO] parse: validation round 1: 9 errors, 1 warnings
+2026-10-10 23:20:16 +    50s [MODEL] model=claude-opus-5-5 purpose=audit parsed spec against the brief backend=cli prompt_chars=41480
+2026-10-10 23:20:54 +    87s [INFO] model call done in 38s: audit parsed spec against the brief (3764 chars)
+2026-10-10 23:20:54 +    87s [INFO] parse: audit found 13 issues
+2026-10-10 23:20:54 +    87s [MODEL] model=claude-opus-5-5 purpose=repair spec: fix validation errors and audit findings backend=cli prompt_chars=44652
+2026-10-10 23:21:10 +   103s [INFO] model call done in 16s: repair spec: fix validation errors and audit findings (3932 chars)
+2026-10-10 23:21:10 +   103s [INFO] parse: validation round 2: 0 errors, 12 warnings
+2026-10-10 23:21:10 +   103s [INFO] spec written to /home/user/phone-agent-builder/out/brief-d.spec.json
+2026-10-10 23:21:10 +   103s [STAGE] generate
+2026-10-10 23:21:10 +   103s [INFO] compiler: 63 spec field(s) are not read by the compiler (see generate.LAST_WARNINGS)
+2026-10-10 23:21:10 +   103s [INFO] tool contract check: every request field, path and response binding matches the supplied tool API
+2026-10-10 23:21:10 +   103s [STAGE] freya save
+2026-10-10 23:21:11 +   104s [FREYA] validate_workflow dry-run ok
+2026-10-10 23:21:12 +   105s [FREYA] workflow created workflow_id=cbf958f4-5d8e-4ac8-b732-003878c82ac9 agent_id=03379c81-42e5-4e1b-9def-a07272585ea7 version=None
+2026-10-10 23:21:12 +   105s [STAGE] export
+2026-10-10 23:21:13 +   106s [FREYA] exported workflow path=/home/user/phone-agent-builder/out/brief-d.workflow.json
+2026-10-10 23:21:13 +   106s [END] status=ok elapsed=106s model_calls=5 workflow_id=cbf958f4-5d8e-4ac8-b732-003878c82ac9 output=/home/user/phone-agent-builder/out/brief-d.workflow.json
