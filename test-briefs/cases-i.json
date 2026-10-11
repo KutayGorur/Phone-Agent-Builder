@@ -1,0 +1,567 @@
+[
+ {
+  "id": "TI-01",
+  "brief": "I",
+  "family": "Multi-product",
+  "level": "hard",
+  "title": "Three products, one shared date beyond the loan deadline",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 1250.5,
+    "days_past_due": 4
+   },
+   {
+    "type": "consumer_loan",
+    "amount_due": 3000.0,
+    "days_past_due": 14,
+    "monthly_instalment": 400.0
+   },
+   {
+    "type": "credit_line",
+    "amount_due": 880.0,
+    "days_past_due": 9,
+    "min_due": 90.0,
+    "line_last4": "5521"
+   }
+  ],
+  "script": "Verified. Cannot pay everything today. Wants to pay all three on Thursday 1 April; accepts the loan being set to its earlier deadline, then confirms the read-back.",
+  "expected": {
+   "outcome": "promise.made",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 1250.5,
+     "date": "2027-04-01"
+    },
+    {
+     "product_id": "p2",
+     "amount": 3000.0,
+     "date": "2027-03-30"
+    },
+    {
+     "product_id": "p3",
+     "amount": 880.0,
+     "date": "2027-04-01"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "Holidays 25, 26, 29 March: 3rd working day after Mon 22 March = Tue 30 March (23, 24, 30); 5th = Thu 1 April (31 March, 1 April).",
+   "loan is late band (14 days): deadline 30 March; overdraft 4 days and credit line 9 days: deadline 1 April"
+  ],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-02",
+  "brief": "I",
+  "family": "Third party",
+  "level": "hard",
+  "title": "Callback proposed after the 17:30 boundary, then exactly 17:30",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 1250.5,
+    "days_past_due": 4
+   }
+  ],
+  "script": "A colleague answers. Customer is available later: first proposes today at 17:45, then tomorrow at 17:30.",
+  "expected": {
+   "outcome": "unreachable",
+   "reason": "callback_set",
+   "promises": [],
+   "notes": [],
+   "callbacks": [
+    {
+     "date": "2027-03-23",
+     "time": "17:30"
+    }
+   ],
+   "transfers": []
+  },
+  "checks": [
+   "MEMO 2 window is 10:00-17:30 inclusive; 17:45 is outside, 17:30 is inside"
+  ],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-03",
+  "brief": "I",
+  "family": "Identity",
+  "level": "hard",
+  "title": "Four wrong answers across two questions (memo 2 limit)",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 1250.5,
+    "days_past_due": 4
+   }
+  ],
+  "script": "Gives two wrong birth dates and two wrong national-id endings; the check ends only on the fourth wrong answer.",
+  "expected": {
+   "outcome": "unverified",
+   "reason": "wrong_answers",
+   "promises": [],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "limit is 4 total, not 3 (printed) and not 5 (memo 1)"
+  ],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-05",
+  "brief": "I",
+  "family": "Dates and amounts",
+  "level": "hard",
+  "title": "Overdraft floor is 20% of arrears rounded up to a whole krone",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 1250.5,
+    "days_past_due": 4
+   }
+  ],
+  "script": "Verified. Cannot pay today. Offers 200 on 1 April; accepts the agent floor of 251 on 1 April and confirms.",
+  "expected": {
+   "outcome": "promise.made",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 251.0,
+     "date": "2027-04-01"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "20% of 1250.50 = 250.10, rounded UP to 251; 25% (printed) = 313 and 30% (memo 1) = 376 are wrong"
+  ],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-06",
+  "brief": "I",
+  "family": "Dates and amounts",
+  "level": "hard",
+  "title": "Memo 2 adds 15 April as a holiday",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-04-12T11:00"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "consumer_loan",
+    "amount_due": 2400.0,
+    "days_past_due": 20,
+    "monthly_instalment": 600.0
+   }
+  ],
+  "script": "Verified. Cannot pay today. Wants to pay in full on Thursday 15 April; accepts the next working day and confirms.",
+  "expected": {
+   "outcome": "promise.made",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p1",
+     "amount": 2400.0,
+     "date": "2027-04-16"
+    }
+   ],
+   "notes": [],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [
+   "15 April is a holiday (memo 2 d); 13, 14, 16 April are working days 1-3, so deadline Fri 16 April; next working day after 15 April is 16 April"
+  ],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-07",
+  "brief": "I",
+  "family": "Third party",
+  "level": "hard",
+  "title": "Callback on a holiday, then the next working day after the long weekend",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-24T16:00"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 1250.5,
+    "days_past_due": 4
+   }
+  ],
+  "script": "A relative answers. Customer free tomorrow at ten (25 March is a holiday), then Tuesday 30 March at ten.",
+  "expected": {
+   "outcome": "unreachable",
+   "reason": "callback_set",
+   "promises": [],
+   "notes": [],
+   "callbacks": [
+    {
+     "date": "2027-03-30",
+     "time": "10:00"
+    }
+   ],
+   "transfers": []
+  },
+  "checks": [
+   "next working day after Wed 24 March is Tue 30 March"
+  ],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-08",
+  "brief": "I",
+  "family": "Multi-product",
+  "level": "hard",
+  "title": "Disputes the overdraft, pays the loan today",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 400.0,
+    "days_past_due": 3
+   },
+   {
+    "type": "consumer_loan",
+    "amount_due": 900.0,
+    "days_past_due": 5,
+    "monthly_instalment": 300.0
+   }
+  ],
+  "script": "Verified. Says he never had an overdraft. Agrees to pay the loan in full today.",
+  "expected": {
+   "outcome": "promise.made",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p2",
+     "amount": 900.0,
+     "date": "2027-03-22"
+    }
+   ],
+   "notes": [
+    {
+     "product_id": "p1",
+     "reason": "disputed"
+    }
+   ],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-09",
+  "brief": "I",
+  "family": "Multi-product",
+  "level": "hard",
+  "title": "Both products already paid",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 400.0,
+    "days_past_due": 3
+   },
+   {
+    "type": "consumer_loan",
+    "amount_due": 900.0,
+    "days_past_due": 5,
+    "monthly_instalment": 300.0
+   }
+  ],
+  "script": "Verified. Says both were paid yesterday.",
+  "expected": {
+   "outcome": "claimed.paid",
+   "reason": null,
+   "promises": [],
+   "notes": [
+    {
+     "product_id": "p1",
+     "reason": "paid_claim"
+    },
+    {
+     "product_id": "p2",
+     "reason": "paid_claim"
+    }
+   ],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-10",
+  "brief": "I",
+  "family": "Tool failure",
+  "level": "hard",
+  "title": "First promise fails twice",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 400.0,
+    "days_past_due": 3
+   },
+   {
+    "type": "consumer_loan",
+    "amount_due": 900.0,
+    "days_past_due": 5,
+    "monthly_instalment": 300.0
+   }
+  ],
+  "script": "Verified. Pays everything today, confirms once.",
+  "expected": {
+   "outcome": "promise.made",
+   "reason": null,
+   "promises": [
+    {
+     "product_id": "p2",
+     "amount": 900.0,
+     "date": "2027-03-22"
+    }
+   ],
+   "notes": [
+    {
+     "product_id": "p1",
+     "reason": "write_failed"
+    }
+   ],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [],
+  "bank": {
+   "max_wrong": 4
+  },
+  "faults": [
+   {
+    "tool": "create_promise",
+    "fail_first_n": 2
+   }
+  ]
+ },
+ {
+  "id": "TI-11",
+  "brief": "I",
+  "family": "Restructuring",
+  "level": "hard",
+  "title": "Plan request goes to PLAN-DESK",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "overdraft",
+    "arrears_nok": 400.0,
+    "days_past_due": 3
+   },
+   {
+    "type": "consumer_loan",
+    "amount_due": 900.0,
+    "days_past_due": 5,
+    "monthly_instalment": 300.0
+   }
+  ],
+  "script": "Verified. Asks for lower payments through a new plan. No hardship.",
+  "expected": {
+   "outcome": "handed.over",
+   "reason": "plan",
+   "promises": [],
+   "notes": [],
+   "callbacks": [],
+   "transfers": [
+    {
+     "queue": "PLAN-DESK"
+    }
+   ]
+  },
+  "checks": [],
+  "bank": {
+   "max_wrong": 4
+  }
+ },
+ {
+  "id": "TI-12",
+  "brief": "I",
+  "family": "Persuasion",
+  "level": "hard",
+  "title": "Late loan gets two attempts, early credit line one",
+  "variables": {
+   "first_name": "Solveig",
+   "last_name": "Aasen",
+   "title": "Ms",
+   "now": "2027-03-22T09:30"
+  },
+  "identity": {
+   "date_of_birth": "1987-03-04",
+   "national_id_last5": "00417",
+   "home_town": "tromso"
+  },
+  "products": [
+   {
+    "type": "consumer_loan",
+    "amount_due": 2000.0,
+    "days_past_due": 30,
+    "monthly_instalment": 500.0
+   },
+   {
+    "type": "credit_line",
+    "amount_due": 600.0,
+    "days_past_due": 6,
+    "min_due": 60.0,
+    "line_last4": "5521"
+   }
+  ],
+  "script": "Verified. Flatly refuses every offer.",
+  "expected": {
+   "outcome": "no.promise",
+   "reason": "refused",
+   "promises": [],
+   "notes": [
+    {
+     "product_id": "p1",
+     "reason": "refused"
+    },
+    {
+     "product_id": "p2",
+     "reason": "refused"
+    }
+   ],
+   "callbacks": [],
+   "transfers": []
+  },
+  "checks": [],
+  "bank": {
+   "max_wrong": 4
+  }
+ }
+]
