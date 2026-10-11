@@ -135,7 +135,13 @@ def tool_contract_problems(spec, wf):
     if items:
         try:
             E, _ = build_E_warn(spec)
-            for k in sorted({E.get('f_pd'), E.get('f_days'), *(E.get('pd_by_type') or {}).values(), *(E.get('days_by_type') or {}).values()} - {None}):
+            types_ = (items.get('type') or {}).get('enum') or ['']
+            need_ = {*(E.get('pd_by_type') or {}).values(), *(E.get('days_by_type') or {}).values()}
+            if any(t_ not in (E.get('pd_by_type') or {}) for t_ in types_):
+                need_.add(E.get('f_pd'))
+            if any(t_ not in (E.get('days_by_type') or {}) for t_ in types_):
+                need_.add(E.get('f_days'))
+            for k in sorted(need_ - {None}):
                 if k and k not in items:
                     probs.append('the engine reads product field %s, which get_account does not return' % k)
         except Exception as e:  # noqa: BLE001
