@@ -694,6 +694,12 @@ def reask(st, lead='', kind='question', then=True):
             offered = True                                          # an offer is on the table: no figure is named a second time
             if pe.get('d'):
                 q = 'Can you do that on %s?' % dstr(from_iso(pe['d']))   # an offer already made is answered, not repeated
+    if offered:
+        # PUB-06: the speaking model reconstructed the floor from history and
+        # invented a fee explanation despite the prompt below. Keep the pending
+        # offer and counters unchanged, and use the existing fixed TTS route.
+        st['question_answered'] = True
+        return speak(bounded_question_answer(st) + (' ' + q if then else ''))
     amount_rule = (' The offer is already made: if they ask how much you can do, for a lower amount or what the figure is, say only "That is the amount I mentioned." '
                    'and name no amount.') if offered else ''
     ans = ('The customer asked something or said something unclear. First reply to it in one short sentence: '
