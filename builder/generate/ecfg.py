@@ -86,6 +86,43 @@ _PCT_KEYS = ('percent_of_field', 'percent', 'percentage', 'pct', 'percent_of_ove
 _FRAC_KEYS = ('fraction', 'ratio', 'multiplier', 'factor')
 
 
+_ROUND_KEYS = ('rounding', 'round', 'floor_rounding', 'round_to', 'round_up_to', 'round_down_to', 'round_up', 'rounding_rule')
+
+
+def parse_rounding(v):
+    """Rounding rule from the shapes seen: {'mode': 'up', 'to': 100}, {'round_up_to': 100}, 'round up to a whole krone',
+    'rounded UP to the next 100 yen', 'to the nearest cent'. -> {'mode': up|down|nearest, 'to': number} or None."""
+    if v is None or v is False:
+        return None
+    if isinstance(v, dict):
+        for k in ('round_up_to', 'round_down_to'):
+            if isinstance(v.get(k), (int, float)) and not isinstance(v.get(k), bool) and v[k] > 0:
+                return {'mode': 'up' if 'up' in k else 'down', 'to': float(v[k])}
+        to = next((v[k] for k in ('to', 'step', 'unit', 'multiple', 'nearest') if isinstance(v.get(k), (int, float)) and not isinstance(v.get(k), bool)), None)
+        if to and to > 0:
+            return {'mode': {'up': 'up', 'ceil': 'up', 'down': 'down', 'floor': 'down'}.get(_s(v.get('mode') or v.get('direction') or 'up').lower(), 'nearest'), 'to': float(to)}
+        for k in ('text', 'rule', 'description'):
+            if isinstance(v.get(k), str):
+                return parse_rounding(v[k])
+        return None
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return {'mode': 'up', 'to': float(v)} if v > 0 else None
+    t = _s(v).lower()
+    if not re.search(r'round|ceil|whole|next|nearest', t):
+        return None
+    mode = 'down' if re.search(r'\bdown\b|floor', t) else ('up' if re.search(r'\bup\b|ceil|next|whole|upward', t) else 'nearest')
+    m = re.search(r'(?:next|nearest|to(?: the)?(?: next| nearest)?|multiple of)\s+(\d+(?:[.,]\d+)?)', t)
+    if m:
+        to = float(m.group(1).replace(',', '.'))
+    elif re.search(r'cent|ore|\u00f8re|penny|pence|centime|\bsen\b', t):
+        to = 0.01
+    elif re.search(r'whole|unit|krone|kroner|yen|dollar|euro|pound|franc|lira|integer', t):
+        to = 1.0
+    else:
+        return None
+    return {'mode': mode, 'to': to} if to > 0 else None
+
+
 def _formula(v, f_pd, fields=None):
     """A floor computed from the product: {'field', 'percent_of_field'} from any shape a parser may produce
     ({"field": "arrears", "percent": 25}, "25% of arrears", 0.25, ...). None when no percentage can be read."""
@@ -116,7 +153,19 @@ def _formula(v, f_pd, fields=None):
         return None
     if fields and field not in fields:
         field = f_pd
-    return {'field': field or f_pd, 'percent_of_field': pct}
+    out = {'field': field or f_pd, 'percent_of_field': pct}
+    if isinstance(v, dict):
+        g = next((v[k] for k in ('greater_of_field', 'greater_of', 'max_with', 'at_least_field', 'minimum_field') if isinstance(v.get(k), str)), None)
+        if g and (not fields or g in fields):
+            out['greater_of'] = g
+        rd = next((parse_rounding(v[k]) for k in _ROUND_KEYS if v.get(k) not in (None, False)), None)
+        if rd:
+            out['round'] = rd
+    elif isinstance(v, str):
+        rd = parse_rounding(v)
+        if rd:
+            out['round'] = rd
+    return out
 
 
 def floor_rules(amts, f_pd, fields=None):
@@ -141,6 +190,10 @@ def floor_rules(amts, f_pd, fields=None):
         r = _formula(v, f_pd, fields)
         if r:
             fm[t] = r
+    gr = next((parse_rounding(amts[k]) for k in ('floor_rounding', 'rounding', 'round_floor_to') if amts.get(k) not in (None, False)), None)
+    if gr:
+        for r in fm.values():
+            r.setdefault('round', gr)
     return ff, fm
 
 
@@ -344,6 +397,12 @@ def _build(spec, warns_out):
     tl = tl.get('tools') if isinstance(tl.get('tools'), dict) else tl
     items = (((tl.get('get_account') or {}).get('response_fields') or {}).get('products') or {}).get('items') or {}
     floor_field, formula = floor_rules(amts, f_pd0, set(items) or None)
+    for k in ('floor_rounding', 'rounding', 'round_floor_to'):
+        if amts.get(k) not in (None, False, '') and parse_rounding(amts[k]) is None:
+            warns.append('floor rounding %r could not be read: the floor is not rounded' % (amts[k],))
+    for t_, v_ in (amts.get('floor_formula_by_product') or {}).items():
+        if isinstance(v_, dict) and any(v_.get(k) not in (None, False) for k in _ROUND_KEYS) and 'round' not in (formula.get(t_) or {}):
+            warns.append('floor rounding of %s could not be read: the floor is not rounded' % t_)
     floor_word = {t: ('minimum payment' if (f or '') in ('minimum_payment', 'minimum_due') else _words(f)) for t, f in floor_field.items() if f}
     for t in formula:
         floor_word.setdefault(t, 'minimum payment')
@@ -397,7 +456,17 @@ def _build(spec, warns_out):
                      (', '.join(_s(o.get('outcome')) for o in cands), promise_o.get('outcome')))
     else:
         promise_o = None
-        if names:
+        # every outcome carries reasons (a brief that requires a reason on every close): the promise outcome is the one whose
+        # name or code says promise and not "no promise", else the one whose `when` says a promise was recorded
+        def label(o):
+            return ' '.join(_s(o.get(k)).lower() for k in ('outcome', 'brief_code'))
+        pl = [o for o in outs if o.get('outcome') != paid_o and re.search(r'promise|ptp|pledge', label(o))
+              and not re.search(r'(^|[\s_-])(no|not|non|broken|failed)[\s_-]*(promise|ptp)', label(o))]
+        if len(pl) != 1:
+            pl = [o for o in outs if o.get('outcome') != paid_o and re.search(r'promise (was|is) recorded|at least one promise|any (recorded )?promise', wh(o))]
+        if len(pl) == 1:
+            promise_o = pl[0]
+        elif names:
             warns.append('no outcome without reasons: promise outcome taken from the first outcome %r' % names[0])
     # no promise: the exhaustion close, else the outcome that lists its reason
     exh = _oc(pers.get('on_exhausted')) if pers.get('on_exhausted') else {'outcome': None, 'reason': None}
@@ -425,6 +494,12 @@ def _build(spec, warns_out):
             if tro is not None:
                 warns.append('transfer outcome %r taken from the text of "when"' % tro.get('outcome'))
         tr_out = tro.get('outcome') if tro else None
+    def sole_reason(o):
+        rs = [r for r in ((o or {}).get('reasons') or []) if r not in (None, '')]
+        return rs[0] if len(rs) == 1 else None
+    out_reason = {'r_promise': sole_reason(promise_o), 'r_paid': sole_reason(find(lambda o: o.get('outcome') == paid_o)) if paid_o else None}
+    if (ap.get('close') or {}).get('reason'):
+        out_reason['r_paid'] = ap['close']['reason']
     out = {'r_promise': promise_o.get('outcome') if promise_o else (names[0] if names else None), 'r_paid': paid_o,
            'r_nopromise': exh['outcome'], 'r_transfer': tr_out}
     seen = {}
@@ -499,6 +574,8 @@ def _build(spec, warns_out):
         'scam_say': (intents.get('sp_scam') or {}).get('say') or 'they can verify this call with the bank\'s customer service',
         'unknown_say': (intents.get('sp_unknown_question') or {}).get('say') or 'I do not have that information',
     }
+    E['out_reason'] = out_reason
+    fill_sole_reasons(E, outs, closing, warns)
     warns.extend(E['cal'].get('warnings') or [])
     return E
 
@@ -522,7 +599,7 @@ def _ack_scope(conf, warns):
 
 # Warnings that mean the compiler substituted a guess for a mandatory meaning (as opposed to a field it ignores or a
 # harmless fallback). The build labels such a spec degraded.
-BLOCKING_MARKS = ('has no amount field',
+BLOCKING_MARKS = ('has no amount field', 'could not be read: the floor',
                   ' dropped: ',   # a malformed spec section the compiler had to drop (a coerced one is only a warning)
                   'is not a known date rule', 'could be the promise outcome', 'no outcome without reasons',
                   'is mapped to two roles', 'taken from the text of "when"')
@@ -530,6 +607,32 @@ BLOCKING_MARKS = ('has no amount field',
 
 def blocking_warnings(warns):
     return [w for w in warns if any(m in w for m in BLOCKING_MARKS)]
+
+
+def fill_sole_reasons(E, outs, closing, warns):
+    """A close {outcome, reason: None} whose outcome the closing table gives exactly one reason gets that reason: a brief
+    that requires a reason on every outcome (closing.every_outcome_carries_reason) would otherwise be closed without one.
+    An outcome with several reasons and no reason chosen is a warning when the flag is set."""
+    sole = {o.get('outcome'): [r for r in (o.get('reasons') or []) if r not in (None, '')] for o in outs if isinstance(o, dict)}
+    every = closing.get('every_outcome_carries_reason') is True
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            oc = node.get('outcome')
+            if isinstance(oc, str) and oc in sole and ('reason' in node or (path and path[-1] in ('close', 'exhausted', 'create_failed', 'failed', 'declined', 'unclear'))):
+                if node.get('reason') in (None, ''):
+                    rs = sole[oc]
+                    if len(rs) == 1:
+                        node['reason'] = rs[0]
+                    elif len(rs) > 1 and every:
+                        warns.append('outcome %r has several reasons and the close at %s names none' % (oc, '.'.join(map(str, path))))
+            for k, v in node.items():
+                if k != 'cal':
+                    walk(v, path + [k])
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, path + [i])
+    walk(E, [])
 
 
 def build_E_warn(spec):
@@ -555,12 +658,12 @@ CONSUMED = {
     'third_party': {'callback', 'wrong_number', 'deceased', 'say_nothing_beyond_opening', 'relative_may_not_verify_or_pay'},
     'identity': {'questions', 'tool', 'on_declined', 'on_failed', 'hints'},
     'debt_statement': {'say', 'product_names', 'include', 'amount_field_by_product', 'days_late_field_by_product'},
-    'amounts': {'past_due_field', 'past_due_field_by_product', 'amount_field_by_product', 'days_late_field_by_product', 'floor_field_by_product', 'floor_formula_by_product', 'floor_percent_by_product', 'floor_percentage_by_product'},
+    'amounts': {'floor_rounding', 'rounding', 'round_floor_to', 'past_due_field', 'past_due_field_by_product', 'amount_field_by_product', 'days_late_field_by_product', 'floor_field_by_product', 'floor_formula_by_product', 'floor_percent_by_product', 'floor_percentage_by_product'},
     'persuasion': {'first_question', 'attempts', 'on_exhausted'},
     'confirmation': {'confirm_question', 'after_recorded_say', 'create_promise_max_tries', 'on_create_failed',
                      'acknowledgement_scope', 'after_recorded_say_after_each_record'},
     'multi_product': {'note_tool', 'note_reasons', 'create_promise_failure', 'dispute_or_paid_continues'},
-    'closing': {'outcomes'},
+    'closing': {'outcomes', 'every_outcome_carries_reason', 'ending_priority'},
     'calendar': {'business_days', 'holidays', 'week_start'},
 }
 _TOP_CONSUMED = set(CONSUMED) | {'call_variables', 'bands', 'intents', 'extra_rules', 'tools', 'tools_server', 'dates', 'parser',

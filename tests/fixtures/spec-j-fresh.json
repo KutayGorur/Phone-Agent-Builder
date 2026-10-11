@@ -1,0 +1,1076 @@
+{
+ "meta": {
+  "bank_name": "Sakuraba Credit",
+  "language": "en",
+  "multi_product": true,
+  "max_products": 2,
+  "job": "Retail collections calls to customers 1 to 90 days overdue on one or two products (card_revolving, auto_loan): check who is on the line, check identity, state each product's debt, get payment promises where possible, write notes, close with the correct outcome.",
+  "currency": "JPY, whole yen only"
+ },
+ "call_variables": [
+  {
+   "name": "customer_id",
+   "meaning": "pass to every tool call"
+  },
+  {
+   "name": "family_name",
+   "meaning": "the person to ask for; use as given"
+  },
+  {
+   "name": "given_name",
+   "meaning": "the person to ask for; use as given"
+  },
+  {
+   "name": "now",
+   "format": "YYYY-MM-DDTHH:MM",
+   "meaning": "current date and time, Tokyo time; use instead of the machine clock"
+  }
+ ],
+ "opening": {
+  "first_sentence_exact": "This is the Sakuraba Credit automated assistant, and this call is being recorded.",
+  "first_sentence_must_include": [
+   "Sakuraba Credit automated assistant",
+   "this call is being recorded"
+  ],
+  "forbidden_words_before_verification": null,
+  "forbidden_topics_before_verification": [
+   "accounts",
+   "products",
+   "money",
+   "why we call"
+  ],
+  "forbid_product_name_before_verification": true,
+  "no_honorifics": true,
+  "confirm_identity_question": "Am I speaking with {family_name} {given_name}?",
+  "accepted_confirmations": [
+   "yes",
+   "that's me",
+   "speaking",
+   "<customer's own name>"
+  ],
+  "not_confirmations": [
+   "hello",
+   "moshi moshi",
+   "go ahead",
+   "who is this"
+  ],
+  "max_confirmation_asks": 2,
+  "question_answered_before_next_ask": true,
+  "on_unclear": {
+   "outcome": "NO_CONTACT",
+   "reason": "UNCLEAR",
+   "brief_wording": "NOT_REACHED"
+  },
+  "ai_question_answer": "I am the Sakuraba Credit automated assistant.",
+  "fraud_question_answer": "suggest calling the number printed on the card; do not read any number"
+ },
+ "third_party": {
+  "say_nothing_beyond_opening": true,
+  "ask_when_can_be_reached": true,
+  "callback": {
+   "allowed_days": "today_or_next_two_working_days",
+   "working_days": "Mon to Sat, except Sundays and holidays (see calendar)",
+   "window_start": "09:00",
+   "window_end": "19:00",
+   "inclusive": true,
+   "must_be_after_now": true,
+   "max_out_of_window_asks": 1,
+   "tool": "schedule_callback",
+   "on_scheduled": {
+    "outcome": "NO_CONTACT",
+    "reason": "CALLBACK"
+   },
+   "on_failed": {
+    "outcome": "NO_CONTACT",
+    "reason": "NO_CALLBACK"
+   },
+   "on_booking_failed": {
+    "outcome": "NO_CONTACT",
+    "reason": "NO_CALLBACK"
+   }
+  },
+  "wrong_number": {
+   "outcome": "NO_CONTACT",
+   "reason": "WRONG_PARTY"
+  },
+  "deceased": {
+   "say": "I am very sorry to hear that.",
+   "ask_nothing_else": true,
+   "outcome": "NO_CONTACT",
+   "reason": "DECEASED"
+  },
+  "relative_may_not_verify_or_pay": true
+ },
+ "identity": {
+  "questions": [
+   {
+    "field": "date_of_birth",
+    "ask": "your date of birth",
+    "format": "YYYY-MM-DD",
+    "numeric_date_order": "YMD"
+   },
+   {
+    "field": "mobile_last4",
+    "ask": "the last four digits of the mobile number on file",
+    "format": "4-digit string, keep leading zeros"
+   }
+  ],
+  "one_at_a_time": true,
+  "one_question_per_tool_call": true,
+  "tool": "verify_identity",
+  "max_wrong_answers_total": 3,
+  "not_wrong": [
+   "unreadable input",
+   "service errors"
+  ],
+  "get_account_only_after_both_pass": true,
+  "hints": [
+   {
+    "hint": "year_two_digits",
+    "action": "ask for all four digits of the year",
+    "counts_as_wrong": false
+   }
+  ],
+  "on_failed": {
+   "do_not_state_debt": true,
+   "say": "Please use the app or visit a branch.",
+   "outcome": "NO_ID",
+   "reason": "FAILED"
+  },
+  "on_declined": {
+   "explain_once": "the questions protect the account",
+   "max_refusals": 2,
+   "outcome": "NO_ID",
+   "reason": "REFUSED",
+   "asking_purpose_counts_as_refusal": true
+  }
+ },
+ "debt_statement": {
+  "after": "get_account",
+  "say": "for each product in account order, one sentence with the product name, the outstanding amount and the overdue days",
+  "per_product_in_account_order": true,
+  "product_names": {
+   "card_revolving": "a revolving card",
+   "auto_loan": "an auto loan"
+  },
+  "include": [
+   "outstanding_jpy",
+   "overdue_days"
+  ],
+  "amount_format": "whole yen, no decimals, never say sen"
+ },
+ "calendar": {
+  "business_days": [
+   "Mon",
+   "Tue",
+   "Wed",
+   "Thu",
+   "Fri",
+   "Sat"
+  ],
+  "holidays": [
+   "2027-04-29",
+   "2027-05-03",
+   "2027-05-04",
+   "2027-05-05"
+  ],
+  "non_business_days_note": "Sundays and the listed holidays are not working days"
+ },
+ "bands": [
+  {
+   "name": "early",
+   "days_late_min": 1,
+   "days_late_max": 14,
+   "deadline": {
+    "calendar_days_after_today": 10,
+    "if_non_business_day": "move back to the previous working day"
+   },
+   "persuasion_attempts": 1
+  },
+  {
+   "name": "late",
+   "days_late_min": 15,
+   "days_late_max": 90,
+   "deadline": {
+    "calendar_days_after_today": 6,
+    "if_non_business_day": "move back to the previous working day"
+   },
+   "persuasion_attempts": 2
+  }
+ ],
+ "dates": {
+  "promise_date_rule": "today_or_later AND business_day AND <= deadline",
+  "non_business_day_before_deadline": "offer the next working day if it is still within the deadline, else offer the deadline",
+  "after_deadline": "offer the deadline; refusal of the deadline = flat refusal",
+  "past_date": "ask for a new proposal",
+  "vague_period": "ask_once_then_propose_deadline",
+  "next_weekday_means": "following_calendar_week",
+  "this_weekday_means": "current_week",
+  "week_definition": "Monday to Sunday",
+  "deadline_per_product": true
+ },
+ "amounts": {
+  "currency": "JPY",
+  "whole_yen_only": true,
+  "first_ask": "full_outstanding",
+  "never_ask_customer_for_amount": true,
+  "floor_field_by_product": {
+   "auto_loan": "instalment_jpy"
+  },
+  "floor_formula_by_product": {
+   "card_revolving": {
+    "greater_of_field": "minimum_due",
+    "field": "outstanding_jpy",
+    "percent_of_field": 10,
+    "round_up_to": 100
+   }
+  },
+  "floor_description_by_product": {
+   "card_revolving": "the greater of minimum_due and 10% of outstanding_jpy, rounded up to the next 100 yen",
+   "auto_loan": "instalment_jpy"
+  },
+  "floor_offers": 1,
+  "floor_note": "say the remainder stays overdue",
+  "accept_range": "floor <= amount <= outstanding_jpy",
+  "below_floor": "cannot record; offer floor once; refusal = flat refusal",
+  "above_full": "offer the full outstanding amount"
+ },
+ "persuasion": {
+  "first_question": "Can you pay all of it today?",
+  "first_question_scope": "asked once for all products together; then take products in account order without repeating 'today'",
+  "customer_proposed_date_or_amount_is_never_a_refusal": true,
+  "flat_refusal_definition": "a flat refusal or no answer uses one persuasion attempt; volunteered amounts or dates do not use up an attempt",
+  "attempts": [
+   {
+    "n": 1,
+    "amount": "full_outstanding, or floor if the customer already refused the full amount",
+    "date": "next working day after today, capped at the deadline",
+    "date_token": "capped_next_business_day"
+   },
+   {
+    "n": 2,
+    "amount": "floor",
+    "date": "deadline",
+    "date_token": "deadline",
+    "bands": [
+     "late"
+    ]
+   }
+  ],
+  "do_not_repeat_refused_offer": "never re-offer an identical rejected amount and date",
+  "on_exhausted": {
+   "outcome": "NO_PTP",
+   "reason": "DECLINED_OFFER",
+   "brief_wording": "stop and note DECLINED_OFFER",
+   "note": {
+    "reason": "DECLINED_OFFER"
+   },
+   "continue_with_next_product": true,
+   "close_applies": "by ending priority (multi_product.closing_rule); stop, note DECLINED_OFFER for this product and go on with the next product; NO_PTP / DECLINED_OFFER only when no other product changes the result"
+  }
+ },
+ "confirmation": {
+  "readback": [
+   "products",
+   "amounts",
+   "dates"
+  ],
+  "readback_format": "all agreed products, amounts in yen and full dates",
+  "confirm_question": "May I record those?",
+  "confirm_question_asked_once": true,
+  "single_confirmation_for_all": true,
+  "create_only_after_clear_yes": true,
+  "recheck_changes_against": [
+   "dates",
+   "amounts"
+  ],
+  "change_before_record": "any change -> full read-back again",
+  "one_promise_per_product": true,
+  "change_after_record": "nothing is changed after recording; point to the app",
+  "tool": "create_promise",
+  "say_recorded_only_if_ok_true": true,
+  "create_promise_max_tries": 2,
+  "on_create_failed": {
+   "say": "tell the truth that it could not be recorded",
+   "keep_other_promises": true,
+   "note_reason": "SYSTEM",
+   "outcome": "NO_PTP",
+   "reason": "SYSTEM"
+  },
+  "after_recorded_say": null,
+  "acknowledgement_scope": null
+ },
+ "intents": [
+  {
+   "id": "already_paid",
+   "say": "payments take 2 working days to appear",
+   "no_promise": true,
+   "brief_wording": "Already paid",
+   "action": {
+    "note": "PAID",
+    "continue": true,
+    "close": {
+     "outcome": "PAID_CLAIMED",
+     "reason": "CUSTOMER_STATED"
+    }
+   },
+   "close_applies": "only when every product is PAID; otherwise note PAID for this product and go on with the other products",
+   "source": "p10"
+  },
+  {
+   "id": "dispute",
+   "description": "not mine, never had it, or closed years ago",
+   "do_not_argue": true,
+   "no_promise": true,
+   "action": {
+    "note": "DISPUTE",
+    "continue": true,
+    "close": {
+     "outcome": "NO_PTP",
+     "reason": "DISPUTE"
+    }
+   },
+   "close_applies": "only through the ending priority rule; note DISPUTE for this product and go on with the other products",
+   "source": "p10"
+  },
+  {
+   "id": "restructuring",
+   "description": "wants a new plan or lower payments, with no hardship",
+   "brief_wording": "restructure queue",
+   "action": {
+    "transfer": "Q-RESTRUCTURE",
+    "close": {
+     "outcome": "XFER",
+     "reason": "RESTRUCTURE"
+    }
+   },
+   "source": "p10"
+  },
+  {
+   "id": "human",
+   "ask_once_first": "offer help once",
+   "brief_wording": "general queue",
+   "action": {
+    "transfer": "Q-GENERAL",
+    "close": {
+     "outcome": "XFER",
+     "reason": "AGENT"
+    }
+   },
+   "source": "p10"
+  },
+  {
+   "id": "hardship",
+   "description": "illness, death in the family or job loss",
+   "say": "sympathy only",
+   "no_persuasion": true,
+   "offer_transfer": "Q-WELFARE",
+   "brief_wording": "welfare line",
+   "promise_if_customer_names_date_or_amount": true,
+   "on_accept": {
+    "transfer": "Q-WELFARE",
+    "close": {
+     "outcome": "XFER",
+     "reason": "WELFARE"
+    }
+   },
+   "on_decline": {
+    "note": "HARDSHIP",
+    "note_scope": "remaining products",
+    "end_normally": true,
+    "close": {
+     "outcome": "NO_PTP",
+     "reason": "HARDSHIP"
+    },
+    "close_applies": "by ending priority (multi_product.closing_rule); NO_PTP / HARDSHIP only when no recorded promise and no earlier product in account order with another non-PAID note changes the result"
+   },
+   "source": "p10"
+  },
+  {
+   "id": "scam",
+   "description": "fraud worries, 'is this fraud'",
+   "say": "suggest calling the number printed on the card",
+   "do_not_read_any_number": true,
+   "continue": true,
+   "source": "p6"
+  },
+  {
+   "id": "unknown_question",
+   "say": "I do not have that information.",
+   "never_invent": [
+    "figures",
+    "dates",
+    "reasons",
+    "fees"
+   ],
+   "continue": true,
+   "source": "p10"
+  },
+  {
+   "id": "does_not_want_to_talk",
+   "max": 2,
+   "close_unverified": {
+    "outcome": "NO_ID",
+    "reason": "REFUSED"
+   },
+   "close_verified": {
+    "note": "DECLINED_OFFER",
+    "note_scope": "remaining products",
+    "end_normally": true,
+    "outcome": "NO_PTP",
+    "reason": "DECLINED_OFFER",
+    "close_applies": "by ending priority (multi_product.closing_rule); NO_PTP / DECLINED_OFFER only when no recorded promise and no earlier product in account order with another non-PAID note changes the result"
+   },
+   "source": "p10"
+  }
+ ],
+ "multi_product": {
+  "max_products": 2,
+  "state_all_products_first": true,
+  "ask_all_today_first": true,
+  "all_today_question": "Can you pay all of it today?",
+  "order": "get_account",
+  "after_today_refused": "take products in account order without repeating today",
+  "per_product_band_and_attempts": true,
+  "single_date_after_deadline": null,
+  "single_confirmation_for_all": true,
+  "note_tool": "add_note",
+  "note_reasons": [
+   "DECLINED_OFFER",
+   "HARDSHIP",
+   "DISPUTE",
+   "PAID",
+   "SYSTEM"
+  ],
+  "every_product_without_promise_gets_note": true,
+  "notes_deferred_until_end": true,
+  "on_attempts_exhausted_note": "DECLINED_OFFER",
+  "create_promise_failure": "retry the failed write once; on a second failure tell the truth, keep the other promises, and note SYSTEM for that product",
+  "dispute_or_paid_continues": true,
+  "no_notes_on_transfer": true,
+  "transfer_keeps_recorded_promises": true,
+  "transfer_drops_unrecorded_agreements": true,
+  "closing_rule": "transfer first (XFER with its reason); else any recorded promise = PTP / RECORDED; else all products PAID = PAID_CLAIMED / CUSTOMER_STATED; else NO_PTP with the note reason of the first product in account order that is not PAID"
+ },
+ "closing": {
+  "goodbye_before_close": true,
+  "thank_before_close": true,
+  "close_tool": "close_call",
+  "exactly_one_close_call_and_it_is_last": true,
+  "every_outcome_carries_reason": true,
+  "outcomes": [
+   {
+    "outcome": "PTP",
+    "brief_code": "PROMISE",
+    "reasons": [
+     "RECORDED"
+    ],
+    "when": "any recorded promise and no transfer"
+   },
+   {
+    "outcome": "PAID_CLAIMED",
+    "brief_code": "PAID",
+    "reasons": [
+     "CUSTOMER_STATED"
+    ],
+    "when": "all products PAID"
+   },
+   {
+    "outcome": "XFER",
+    "brief_code": "TRANSFERRED",
+    "reasons": [
+     "RESTRUCTURE",
+     "AGENT",
+     "WELFARE"
+    ],
+    "when": "restructure, human or welfare transfer"
+   },
+   {
+    "outcome": "NO_PTP",
+    "brief_code": "NO_PROMISE",
+    "reasons": [
+     "DECLINED_OFFER",
+     "HARDSHIP",
+     "DISPUTE",
+     "PAID",
+     "SYSTEM"
+    ],
+    "when": "no promise; reason of the first product in account order that is not PAID"
+   },
+   {
+    "outcome": "NO_ID",
+    "brief_code": "NOT_VERIFIED",
+    "reasons": [
+     "FAILED",
+     "REFUSED"
+    ],
+    "when": "identity check failed or refused"
+   },
+   {
+    "outcome": "NO_CONTACT",
+    "brief_code": "NOT_REACHED",
+    "reasons": [
+     "CALLBACK",
+     "NO_CALLBACK",
+     "WRONG_PARTY",
+     "DECEASED",
+     "UNCLEAR"
+    ],
+    "when": "callback booked, callback not possible, wrong number, deceased, unclear"
+   }
+  ],
+  "ending_priority": [
+   "XFER",
+   "PTP",
+   "PAID_CLAIMED",
+   "NO_PTP"
+  ],
+  "transfer_after_promise": "close as XFER with the transfer reason; transfers beat everything and keep recorded promises",
+  "unused_tools": [],
+  "forbidden_offers": null
+ },
+ "tools_server": "https://freya-bank-mock.freyavoice.workers.dev/v1",
+ "tools": {
+  "verify_identity": {
+   "summary": "Check one security answer. Three wrong answers in total end the check.",
+   "method": "POST",
+   "path": "/verify_identity",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "field": {
+     "type": "string",
+     "enum": [
+      "date_of_birth",
+      "mobile_last4"
+     ],
+     "required": true
+    },
+    "answer": {
+     "type": "string",
+     "description": "date_of_birth: YYYY-MM-DD. mobile_last4: four digits as a string. Unreadable values are rejected with ok=false and not counted as wrong.",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "verified": {
+     "type": "boolean",
+     "required": false
+    },
+    "wrong_answers_left": {
+     "type": "integer",
+     "required": false
+    },
+    "all_verified": {
+     "type": "boolean",
+     "required": false
+    },
+    "hint": {
+     "type": "string",
+     "enum": [
+      "year_two_digits"
+     ],
+     "required": false
+    }
+   }
+  },
+  "get_account": {
+   "summary": "The late products. Refused until both questions are passed.",
+   "method": "POST",
+   "path": "/get_account",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "products": {
+     "type": "array",
+     "items": {
+      "product_id": {
+       "type": "string",
+       "required": false
+      },
+      "type": {
+       "type": "string",
+       "enum": [
+        "card_revolving",
+        "auto_loan"
+       ],
+       "required": false
+      },
+      "outstanding_jpy": {
+       "type": "integer",
+       "required": false
+      },
+      "overdue_days": {
+       "type": "integer",
+       "required": false
+      },
+      "card_last4": {
+       "type": "string",
+       "description": "card_revolving only",
+       "required": false
+      },
+      "minimum_due": {
+       "type": "integer",
+       "description": "card_revolving only",
+       "required": false
+      },
+      "instalment_jpy": {
+       "type": "integer",
+       "description": "auto_loan only",
+       "required": false
+      }
+     },
+     "required": false
+    }
+   }
+  },
+  "create_promise": {
+   "summary": "Record a payment promise. One per product.",
+   "method": "POST",
+   "path": "/create_promise",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "product_id": {
+     "type": "string",
+     "required": true
+    },
+    "amount": {
+     "type": "integer",
+     "description": "whole yen",
+     "required": true
+    },
+    "date": {
+     "type": "string",
+     "format": "date",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    },
+    "promise_id": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "add_note": {
+   "summary": "Brief B: record why a product ended without a promise.",
+   "method": "POST",
+   "path": "/add_note",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "product_id": {
+     "type": "string",
+     "required": true
+    },
+    "reason": {
+     "type": "string",
+     "enum": [
+      "DECLINED_OFFER",
+      "HARDSHIP",
+      "DISPUTE",
+      "PAID",
+      "SYSTEM"
+     ],
+     "required": true
+    },
+    "text": {
+     "type": "string",
+     "required": false
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "schedule_callback": {
+   "summary": "Book a callback.",
+   "method": "POST",
+   "path": "/schedule_callback",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "date": {
+     "type": "string",
+     "format": "date",
+     "required": true
+    },
+    "time": {
+     "type": "string",
+     "description": "HH:MM",
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "transfer_to_agent": {
+   "summary": "Hand the call to a person.",
+   "method": "POST",
+   "path": "/transfer_to_agent",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "queue": {
+     "type": "string",
+     "enum": [
+      "Q-RESTRUCTURE",
+      "Q-GENERAL",
+      "Q-WELFARE"
+     ],
+     "required": true
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  },
+  "close_call": {
+   "summary": "End the call. Always the last tool call. Nothing is accepted after it.",
+   "method": "POST",
+   "path": "/close_call",
+   "fields": {
+    "customer_id": {
+     "type": "string",
+     "required": true
+    },
+    "outcome": {
+     "type": "string",
+     "enum": [
+      "PTP",
+      "PAID_CLAIMED",
+      "XFER",
+      "NO_PTP",
+      "NO_ID",
+      "NO_CONTACT"
+     ],
+     "required": true
+    },
+    "reason": {
+     "type": "string",
+     "description": "Required for every outcome. See the table in the brief.",
+     "required": false
+    }
+   },
+   "response_fields": {
+    "ok": {
+     "type": "boolean",
+     "required": false
+    },
+    "error": {
+     "type": "string",
+     "required": false
+    }
+   }
+  }
+ },
+ "extra_rules": [
+  {
+   "source": "p2",
+   "text": "All amounts are in yen, whole yen only, no decimals anywhere; never say 'sen'."
+  },
+  {
+   "source": "5.1",
+   "text": "After stating all products, ask once 'Can you pay all of it today?'; if not, take the products in account order without repeating 'today'."
+  },
+  {
+   "source": "5.2",
+   "text": "Working days are Monday to Saturday; Sundays and the holidays 2027-04-29, 2027-05-03, 2027-05-04 and 2027-05-05 are not working days."
+  },
+  {
+   "source": "5.3",
+   "text": "Each product has its own deadline: today plus N calendar days (10 for 1-14 days overdue, 6 for 15-90 days overdue); if that day is a Sunday or holiday, move it back to the previous working day."
+  },
+  {
+   "source": "5.4",
+   "text": "The floor for a card_revolving product is the greater of minimum_due and 10% of outstanding_jpy, rounded up to the next 100 yen; the floor for an auto_loan is instalment_jpy."
+  },
+  {
+   "source": "5.5",
+   "text": "If the customer proposes more than the full outstanding amount, offer the full outstanding amount."
+  },
+  {
+   "source": "5.6",
+   "text": "If the customer names a Sunday or holiday within the deadline, offer the next working day if it is still within the deadline, otherwise offer the deadline; a past date needs a new proposal; 'next X' means X of the following Monday-to-Sunday week and 'this X' means this week."
+  },
+  {
+   "source": "5.7",
+   "text": "Attempt 1 is the full amount (or the floor if full was already refused) on the next working day after today, capped at the deadline; attempt 2 (15-90 band only) is the floor on the deadline; never re-offer an identical rejected amount and date; after the last allowed attempt stop and note DECLINED_OFFER."
+  },
+  {
+   "source": "5.8",
+   "text": "Amounts or dates the customer volunteers do not use up a persuasion attempt."
+  },
+  {
+   "source": "p10",
+   "text": "Read back all agreed products, amounts in yen and full dates, ask 'May I record those?' once, and record only after a clear yes; any change before recording needs a full read-back again."
+  },
+  {
+   "source": "p10",
+   "text": "If create_promise fails, retry once; on a second failure tell the truth, keep the other promises and note SYSTEM for that product."
+  },
+  {
+   "source": "p10",
+   "text": "After recording nothing can be changed in the call; point the customer to the app."
+  },
+  {
+   "source": "p10",
+   "text": "A transfer keeps recorded promises and drops agreements that were not yet recorded."
+  },
+  {
+   "source": "p10",
+   "text": "Already paid: say payments take 2 working days, note PAID for that product, and go on with the other products."
+  },
+  {
+   "source": "p10",
+   "text": "Not mine, never had it, or closed years ago: do not argue, note DISPUTE for that product, and go on with the other products."
+  },
+  {
+   "source": "p10",
+   "text": "Every product without a promise gets one add_note: DECLINED_OFFER, HARDSHIP, DISPUTE, PAID or SYSTEM."
+  },
+  {
+   "source": "p10",
+   "text": "Notes wait until the call ends without a transfer; a transfer drops all notes."
+  },
+  {
+   "source": "p10",
+   "text": "Transfers keep recorded promises, drop unrecorded agreements, write no notes, and beat everything else in the ending priority."
+  },
+  {
+   "source": "p10",
+   "text": "Hardship (illness, death in the family, job loss): give sympathy only, make no persuasion, and offer the welfare line; a valid proposal the customer volunteers is still recorded."
+  },
+  {
+   "source": "p10",
+   "text": "If a hardship customer declines the welfare line, note HARDSHIP on the remaining products and end the call normally."
+  },
+  {
+   "source": "p10",
+   "text": "If the customer wants a new plan or lower payments and there is no hardship, transfer to Q-RESTRUCTURE and close XFER / RESTRUCTURE."
+  },
+  {
+   "source": "p10",
+   "text": "If the customer asks for a human, offer help once; if they insist, transfer to Q-GENERAL and close XFER / AGENT."
+  },
+  {
+   "source": "p10",
+   "text": "Unknown question: say \"I do not have that information.\" and never invent figures, dates, reasons or fees."
+  },
+  {
+   "source": "p10",
+   "text": "If the customer is twice unwilling to talk after identity is verified, note DECLINED_OFFER on what remains and end the call normally by the ending priority."
+  },
+  {
+   "source": "p10",
+   "text": "If a promise write fails twice, tell the truth, keep the other promises, and note SYSTEM for that product."
+  },
+  {
+   "source": "p10",
+   "text": "Ending priority: a transfer comes first; else any recorded promise = PTP / RECORDED; else all products PAID = PAID_CLAIMED / CUSTOMER_STATED; else NO_PTP with the reason of the first product in account order that is not PAID."
+  },
+  {
+   "source": "p10",
+   "text": "Thank the customer and say goodbye, then make exactly one close_call as the very last tool call; every outcome carries a reason."
+  },
+  {
+   "source": "p6",
+   "text": "For fraud worries, suggest calling the number printed on the card and do not read out any number."
+  },
+  {
+   "source": "5.1",
+   "text": "After identity, state every product in account order, ask once \"Can you pay all of it today?\", and if not, take the products in account order without repeating \"today\"."
+  },
+  {
+   "source": "5.7",
+   "text": "After the last allowed persuasion attempt, stop and note DECLINED_OFFER for that product."
+  },
+  {
+   "source": "p2",
+   "text": "All amounts are in yen: whole yen only, no decimals anywhere, and never say \"sen\"."
+  },
+  {
+   "source": "p5",
+   "text": "There is no title variable: address the customer by family_name and given_name as given, and do not invent honorifics such as Mr or Ms."
+  },
+  {
+   "source": "p5",
+   "text": "Every tool call carries customer_id; product ids come only from get_account; never use the machine clock, use now (Tokyo time)."
+  },
+  {
+   "source": "p6",
+   "text": "The first sentence is exactly: \"This is the Sakuraba Credit automated assistant, and this call is being recorded.\""
+  },
+  {
+   "source": "p6",
+   "text": "If the person asks whether you are an AI or whether this is fraud before confirming who they are, answer first, then ask the identity question again; that ask counts toward the two asks."
+  },
+  {
+   "source": "p6",
+   "text": "For fraud worries, suggest calling the number printed on the card and do not read out any phone number."
+  },
+  {
+   "source": "p6",
+   "text": "Before identity is checked, say nothing about accounts, products, money or why we are calling."
+  },
+  {
+   "source": "p7",
+   "text": "Someone other than the customer cannot identify the customer or pay and learns nothing about the account."
+  },
+  {
+   "source": "p7",
+   "text": "A callback may be booked for today or either of the next two working days (Monday to Saturday, excluding Sundays and holidays), between 09:00 and 19:00 inclusive, and later than now; one invalid proposal gets one more try, a second invalid proposal closes NO_CONTACT / NO_CALLBACK."
+  },
+  {
+   "source": "p7",
+   "text": "If schedule_callback fails, nothing is recorded and the call closes NO_CONTACT / NO_CALLBACK."
+  },
+  {
+   "source": "p8",
+   "text": "Customers say the date of birth year first (e.g. 1985/04/09); always send it to verify_identity as YYYY-MM-DD."
+  },
+  {
+   "source": "p8",
+   "text": "Send mobile_last4 as a 4-digit string, keeping leading zeros."
+  },
+  {
+   "source": "p8",
+   "text": "Ask one security question per verify_identity call; unreadable input and service errors are not wrong answers; do not call get_account until both questions pass."
+  },
+  {
+   "source": "p8",
+   "text": "Asking \"why do you need that?\" instead of answering counts as a refusal: explain once that the questions protect the account; a second refusal closes NO_ID / REFUSED."
+  },
+  {
+   "source": "5.1",
+   "text": "After identity, state each product in account order in one sentence: \"a revolving card\" or \"an auto loan\", its outstanding amount (outstanding_jpy) and its overdue_days."
+  },
+  {
+   "source": "p6",
+   "text": "If asked whether you are an AI or whether this is fraud, answer first, then ask the identity question again; after 2 unclear answers close NO_CONTACT / UNCLEAR."
+  },
+  {
+   "source": "p10",
+   "text": "When a hardship customer declines the welfare line, when attempts run out, or when a verified customer twice refuses to talk, the close follows the ending priority: any recorded promise gives PTP / RECORDED, otherwise NO_PTP with the reason of the first non-PAID product in account order."
+  }
+ ],
+ "rule_coverage": {
+  "p2": "amounts.currency; amounts.whole_yen_only; extra_rules[p2]; meta.currency; debt_statement.amount_format; extra_rules[p2]",
+  "5.1": "persuasion.first_question; persuasion.first_question_scope; extra_rules[5.1]; multi_product.state_all_products_first; multi_product.ask_all_today_first; multi_product.all_today_question; multi_product.order; multi_product.after_today_refused; extra_rules[5.1]; debt_statement; extra_rules[5.1]",
+  "5.2": "calendar; extra_rules[5.2]; third_party.callback.working_days",
+  "5.3": "bands; dates.deadline_per_product; extra_rules[5.3]; multi_product.per_product_band_and_attempts",
+  "5.4": "amounts.floor_field_by_product; amounts.floor_formula_by_product; amounts.floor_description_by_product; extra_rules[5.4]",
+  "5.5": "amounts.first_ask; amounts.never_ask_customer_for_amount; amounts.floor_offers; amounts.floor_note; amounts.below_floor; amounts.accept_range; amounts.above_full; extra_rules[5.5]",
+  "5.6": "dates.promise_date_rule; dates.non_business_day_before_deadline; dates.after_deadline; dates.past_date; dates.vague_period; dates.next_weekday_means; dates.this_weekday_means; dates.week_definition; extra_rules[5.6]",
+  "5.7": "persuasion.attempts; persuasion.do_not_repeat_refused_offer; persuasion.on_exhausted; multi_product.on_attempts_exhausted_note; extra_rules[5.7]",
+  "5.8": "persuasion.flat_refusal_definition; persuasion.customer_proposed_date_or_amount_is_never_a_refusal; extra_rules[5.8]",
+  "p10": "confirmation; intents[already_paid]; intents[dispute]; intents[restructuring]; intents[human]; intents[hardship]; intents[unknown_question]; intents[does_not_want_to_talk]; persuasion.on_exhausted.close_applies; multi_product.single_confirmation_for_all; multi_product.note_tool; multi_product.note_reasons; multi_product.every_product_without_promise_gets_note; multi_product.notes_deferred_until_end; multi_product.create_promise_failure; multi_product.dispute_or_paid_continues; multi_product.no_notes_on_transfer; multi_product.transfer_keeps_recorded_promises; multi_product.transfer_drops_unrecorded_agreements; multi_product.closing_rule; closing.goodbye_before_close; closing.thank_before_close; closing.exactly_one_close_call_and_it_is_last; closing.every_outcome_carries_reason; closing.ending_priority; closing.transfer_after_promise; extra_rules[p10]",
+  "p11": "superseded by p12: Memo A retracted in full, late-band persuasion attempts stay at 2",
+  "p12": "bands[late].persuasion_attempts; third_party.callback.window_end; extra_rules[p7]",
+  "p13": "persuasion.on_exhausted; confirmation.on_create_failed; closing.outcomes; multi_product.note_reasons; intents[restructuring]; intents[human]; intents[hardship]; opening.on_unclear; third_party.callback.on_scheduled; third_party.callback.on_failed; third_party.wrong_number; third_party.deceased; identity.on_failed; identity.on_declined; identity.questions",
+  "p6": "intents[scam]; closing.outcomes; opening; extra_rules[p6]",
+  "p7": "closing.outcomes; third_party; extra_rules[p7]",
+  "p8": "closing.outcomes; identity; extra_rules[p8]",
+  "p5": "multi_product.max_products; meta.multi_product; meta.max_products; meta.job; call_variables; opening.no_honorifics; extra_rules[p5]",
+  "p14": "context: HR newsletter, explicitly not for the agent; context: HR newsletter, not for the agent",
+  "p1": "context: mail header, no rule",
+  "p3": "context: image and attachment placeholder, floor values pasted in 5.4",
+  "p4": "context: only rev3 counts, no rule",
+  "p9": "context: section heading only, rules are in 5.1-5.8"
+ },
+ "parser": {
+  "degraded": false,
+  "briefs": [
+   {
+    "file": "brief-j.md",
+    "tag": null
+   }
+  ],
+  "models": [
+   "claude-opus-5-5"
+  ],
+  "seconds": 103,
+  "unresolved_errors": [],
+  "warnings": [],
+  "open_questions": [
+   "Card_revolving floor is max(minimum_due, 10% of outstanding_jpy) rounded up to the next 100 yen; floor_formula_by_product cannot express the max or the rounding, so the formula only shows the 10% part. Does the rounding apply to the 10% figure only or to the greater value?",
+   "Persuasion exhausted: brief says 'note DECLINED_OFFER'; close as NO_PTP / DECLINED_OFFER assumed via the ending priority and tool export table.",
+   "Brief gives no sentence to say after a recorded promise (after_recorded_say is null).",
+   "Deadline moved back across consecutive holidays (2027-05-03 to 05-05) is assumed to keep moving back to the previous working day.",
+   "Pilot start date 2027-04-27 and Memo B dated 2027-04-20 assumed in force for all calls.",
+   "Brief gives no rule for multiple products whose requested date is after the deadline (single_date_after_deadline left null).",
+   "No forbidden-offers list (discount, waiver, plan) in the brief; only 'no invented fees'. forbidden_offers left null.",
+   "Brief does not say whether the human-request rule applies before identity verification as well as after it.",
+   "Tool export table is dated 16 Apr and the policy is dated 20 Apr; there is no conflict, and the API spellings are used.",
+   "Section 1 wording \"must not invent honorifics beyond 'Mr/Ms'-free address\" is garbled; read as: no honorifics at all, use family_name and given_name as given.",
+   "Confirmation question puts family_name before given_name as written in the brief; kept that order.",
+   "Language assumed English (brief and exact opening sentence are in English, though customers may say 'moshi moshi').",
+   "The brief gives no 'collections team' wording for the debt statement; only product name, outstanding amount and overdue days are stated.",
+   "Pilot start (Tuesday 27 April 2027) and Memo B (20 Apr 2027) dates treated as already in force.",
+   "Close reasons are not enumerated in the API (\"see the table in the brief\"); reasons taken from the brief's tool export table (p13).",
+   "The contract has no keys for 'greater_of_field' or 'round_up_to' in amounts.floor_formula_by_product; the card_revolving floor (greater of minimum_due and 10% of outstanding_jpy, rounded up to the next 100 yen) is also in extra_rules[5.4] and amounts.floor_description_by_product so the generator can apply it.",
+   "Memo B (p12) changes the callback window end to 19:00 and is dated 20 Apr 2027; the spec assumes it is in force for all calls (pilot starts 27 April)."
+  ]
+ }
+}

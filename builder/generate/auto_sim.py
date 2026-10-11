@@ -20,6 +20,7 @@ Findings go to the trace as compiler gaps; nothing here changes the workflow.
 """
 import datetime as dt
 import json
+import math
 import re
 import os
 import sys
@@ -145,6 +146,13 @@ def floor_of(E, raw):
     if v is None and isinstance(fm, dict):
         try:
             v = round(float(raw.get(fm.get('field') or pdf(E, raw.get('type')))) * float(fm.get('percent_of_field')) / 100.0 + 0.004999, 2)
+            if fm.get('greater_of') and raw.get(fm['greater_of']) not in (None, ''):
+                v = max(v, float(raw[fm['greater_of']]))
+            rd = fm.get('round')
+            if rd:
+                unit = float(rd['to'])
+                n = {'up': math.ceil, 'down': math.floor, 'nearest': lambda x: math.floor(x + 0.5)}[rd.get('mode') or 'up'](round(v / unit, 9))
+                v = round(n * unit, 2)
         except Exception:
             v = None
     pd = float(raw[pdf(E, raw.get('type'))])

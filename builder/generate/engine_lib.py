@@ -435,9 +435,28 @@ def floor_for(raw):
         try:
             base = float(raw.get(fm.get('field') or pd_field(raw)))
             v = round(base * float(fm.get('percent_of_field')) / 100.0 + 0.004999, 2)
+            g = fm.get('greater_of')
+            if g and raw.get(g) not in (None, ''):
+                v = max(v, float(raw.get(g)))
+            rd = fm.get('round')
+            if rd:
+                v = round_to(v, rd)
         except Exception:
             v = None
     return v
+
+
+def round_to(v, rd):
+    """Round a floor to a multiple of rd['to'] (mode up, down or nearest); the 1e-9 slack keeps exact multiples exact."""
+    q = v / float(rd['to'])
+    n = int(q)
+    if rd.get('mode') == 'down':
+        pass
+    elif rd.get('mode') == 'nearest':
+        n = int(q + 0.5)
+    elif q - n > 1e-9:
+        n += 1
+    return round(n * float(rd['to']), 2)
 
 
 def floor_word(p):
@@ -611,11 +630,11 @@ def final(st, lead=''):
         fails = [p for p in prods if p['status'] == 'failed']
         if fails:
             txt += ' I could not record the promise for ' + ' and '.join(p['label'] for p in fails) + '.'
-        return set_close(E['out']['r_promise'], None, goodbye((lead + ' ' + txt).strip()))
+        return set_close(E['out']['r_promise'], (E.get('out_reason') or {}).get('r_promise'), goodbye((lead + ' ' + txt).strip()))
     reasons = [(p['note'] if p['status'] == 'noted' else E['create_failed']['reason']) for p in bad]
     paid_reason = E['paid_reason']
     if reasons and all(r == paid_reason for r in reasons) and E['out'].get('r_paid'):
-        return set_close(E['out']['r_paid'], None, goodbye(lead.strip()))
+        return set_close(E['out']['r_paid'], (E.get('out_reason') or {}).get('r_paid'), goodbye(lead.strip()))
     first = next((r for r in reasons if r != paid_reason), reasons[0] if reasons else E['exhausted']['reason'])
     if any(p['status'] == 'failed' for p in prods) and not rec:
         txt = (lead + ' ' + E['create_failed']['say_text']).strip()
