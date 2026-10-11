@@ -99,3 +99,22 @@ python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<b
 - Logic tests (5 + 56) OK, parser selftest OK. `build.py --dry-run` ends `status=ok`: Brief A 26 s, A+B 52 s, C 46 s, D 114 s, E 85 s.
 - `local_sim.py` crashes on a fresh clone (StopIteration) until `out/brief-c|d|e.spec.json` exist (they are gitignored, only f/g/h specs are committed). Generate first: `for x in c d e; do python3 builder/build.py --dry-run test-briefs/brief-$x.md test-briefs/tools-$x.openapi.json; done`. Needs `FREYA_API_KEY` set to any value for dry run to start? Not required in the run above.
 - After that, local_sim shows 2 FAILs on freshly parsed specs: D TD-03 (second promise 480 vs expected 120, overdraft floor) and E TE-04 (leftover steps after close). Likely parser variance on C/D/E; reported to the builder owner, not fixed here.
+
+## 7b. Final document-folder contract (2026-10-11; supersedes practice-only assumptions above)
+
+The published final pack changes the input to one document folder and requires a persistent HTTPS bank mock deployed before building. Keep the input pack and mock fixtures outside the builder repository. Fixture records are excluded from workflow compilation; the builder derives policy and API contracts from source documents. The old practice `--selftest` is not a final-case check.
+
+Install the PDF reader dependency, supply Freya environment credentials and a working Claude CLI login (or ANTHROPIC_API_KEY), then build on one designated machine:
+
+```bash
+python3 -m pip install -r requirements-documents.txt
+PARSER_MODEL=claude-sonnet-5-5 PARSER_EFFORT=low python3 builder/build.py "{case_folder}" --mock-url "https://YOUR-PERSISTENT-MOCK.workers.dev" --budget-min 27
+```
+
+The folder name determines the output stem and local `.freya-agents.json` slot. Rebuild on that machine to update the same workflow. Folder builds fail nonzero on incomplete source extraction, source mutation, missing requirements, failed semantic vectors/audit or platform validation. Exact recorded model responses may be resumed only when request inputs match and current gates pass; every resumed answer and its provenance is retained in the new model session. Each build performs a fresh complete-source audit.
+
+Success requires the final trace to end `status=ok` and the output to be a real `freya.export_workflow` envelope. Include the complete adjacent `*.model.jsonl` session when packaging. Local vector and audit success do not prove live success; final tests use `ci/sim.py --runner document --cases <source-derived-cases.json>` under the shared sim lock, with `--only` for a smoke or `--full` for a milestone, and a meaningful `--why`. Inspect both the conversation verdict and actual tool dispatch/body checks. A stateless mock cannot provide a bank ledger.
+
+Package the single final stem with `ci/prepare_submission.py <stem> --manifest --members-file <members.json> --mock-url <HTTPS-origin> --run-command '<command containing {case_folder}>' --team '<actual team>' --apply --commit`. The manifest uses the build revision recorded in the successful trace, while the packaging commit stores the attached exports/session. Pull with rebase before pushing. No manual changes to a generated agent, no secrets in attached traces.
+
+The final manifest fields are `team`, `members` (name/email), `repo`, `commit`, `run_command`, `workflow`, `trace`, `mock_url` (singular workflow/trace). Send three attachments: this submission.json, the matching exported workflow, and the complete builder trace/session. The final kit names yavuz@freyavoice.ai and a deadline of 2026-10-11 20:00 UTC / 23:00 Istanbul. Sending is an external communication; Kutay sends it or explicitly authorizes sending. Keep the Worker up until results are out.
