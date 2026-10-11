@@ -1,3 +1,5 @@
 # Sim slot lock
 
-codex-flight | scam/injection guards comprehensive tests | started 2026-10-11T10:45:42Z | expected 20 min
+(currently free)
+
+Guard candidate: A v8 and A+B v3 published. Both passed dry run; chat smoke and unchanged D control returned HTTP 504. No new simulations started.
