@@ -31,3 +31,5 @@ Merge order for generator work: 06 -> 07 -> (01/02/03/04 fixes, small PRs). Anyo
 | 19 complete public platform check on current candidates | team/comms/log-codex-flight.md | yes (A full then combined full) | no | 18 | codex-flight | done (all cases attempted; live readiness blocked) | 2026-10-11 | main | A v11 0/10; combined v6 0/13; all opening-only stalls; sim slot free |
 
 
+
+| 20 unchanged public recovery retry | team/comms/log-codex-flight.md | yes (PUB-01 gate, remaining A, full combined) | no | 19 | codex-flight | done (execution recovered; A 10/10; combined raw 11/13, 13/13 conversation; current 3-rep confidence pending) | 2026-10-11 | main | no stalls; sim slot free; unchanged A v11 / combined v6 |
