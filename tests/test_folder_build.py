@@ -3,6 +3,18 @@ from builder.folder_build import choose_documents, origin, validate_plan, workfl
 
 
 class FolderCompilerTests(unittest.TestCase):
+    def test_last_allowed_answer_routes_before_turn_limit(self):
+        accepted={'target_node':'success','condition':{'operator':'equals','variable':'answer','operand':'yes'}}
+        stay={'target_node':'ask','condition':{'operator':'always'}}
+        original={'nodes':{'ask':{'name':'ask','max_node_turns':3,'max_turn_transition':'failed','transitions':[accepted,stay]}}}
+        result=platform_compatible_workflow(original)
+        node=result['nodes']['ask']
+        self.assertNotIn('max_node_turns',node)
+        self.assertEqual(node['transitions'][0],accepted)
+        self.assertEqual(node['transitions'][1]['condition'],{'operator':'greater_than','variable':'ask.current_turns','operand':2})
+        self.assertEqual(node['transitions'][-1],stay)
+        self.assertEqual(result,platform_compatible_workflow(result))
+
     def test_internal_steps_cannot_trigger_global_interrupts_and_answers_can_clear(self):
         original={'nodes':{'compute':{'passthrough':True},'ask':{'extraction_schema':[{'name':'consent','type':'string','enum_values':['yes','no']}] }},'global_nodes':{'silence':{'passthrough':True,'excluded_nodes':['end']},'human':{'passthrough':False}}}
         result=platform_compatible_workflow(original)

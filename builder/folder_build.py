@@ -107,6 +107,18 @@ for row in mapping_rows:
                     # Generated state machines clear extracted answers before
                     # asking again. Rejected clears can preserve old consent.
                     values.append('')
+            limit=node.get('max_node_turns')
+            target=node.get('max_turn_transition')
+            if isinstance(limit,int) and limit>0 and isinstance(target,str) and target:
+                # The live cap runs before extraction, rejecting a valid final
+                # answer. Evaluate successful routes first, then the limit.
+                transitions=node.setdefault('transitions',[])
+                fallback={'target_node':target,'description':'turn limit after valid-answer transitions',
+                    'condition':{'operator':'greater_than','variable':node.get('name','')+'.current_turns','operand':limit-1}}
+                at=next((i for i,t in enumerate(transitions) if t.get('condition',{}).get('operator')=='always'),len(transitions))
+                transitions.insert(at,fallback)
+                node.pop('max_node_turns',None)
+                node.pop('max_turn_transition',None)
     return result
 
 
