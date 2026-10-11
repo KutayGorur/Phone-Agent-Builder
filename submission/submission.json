@@ -1,0 +1,19 @@
+{
+  "team": "Team Throw",
+  "members": [
+    {
+      "name": "Kutay Görür",
+      "email": "gorurkutay@gmail.com"
+    },
+    {
+      "name": "İnan Derin Akın",
+      "email": "inandakin@gmail.com"
+    }
+  ],
+  "repo": "https://github.com/KutayGorur/Phone-Agent-Builder.git",
+  "commit": "4a937ba3429744d106a3ad72fbd6c365ed3eb851",
+  "run_command": "python3 -m pip install -r requirements-documents.txt && PARSER_MODEL=claude-sonnet-5-5 PARSER_EFFORT=low python3 builder/build.py \"{case_folder}\" --mock-url https://kutay-bank-mock.final-mock-work.workers.dev --budget-min 27",
+  "workflow": "submission/finalfolder.workflow.json",
+  "trace": "submission/traces/finalfolder.log",
+  "mock_url": "https://kutay-bank-mock.final-mock-work.workers.dev"
+}
