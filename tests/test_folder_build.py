@@ -16,6 +16,11 @@ class FolderCompilerTests(unittest.TestCase):
         result={'workflow':{'nodes':{'compute':{'pre_actions':[tool]}}},'tests':[{'name':'standard character conversion','node':'compute','vars':{},'expect_vars':{'result':'A'}}]}
         self.assertIn('PASS 1',run_vectors(result))
 
+    def test_global_guard_vectors_are_executed(self):
+        tool={'type':'function','function':{'handler':'__function__:code_exec','parameters':{'properties':{'code':{'default':"vars['count'] = int(vars.get('count', 0)) + 1"}}}}}
+        result={'workflow':{'nodes':{},'global_nodes':{'guard':{'pre_actions':[tool]}}},'tests':[{'name':'global counter','node':'guard','vars':{'count':1},'expect_vars':{'count':2}}]}
+        self.assertIn('PASS 1',run_vectors(result))
+
     def test_unsupported_generated_code_is_rejected_without_execution(self):
         self.assertTrue(code_problems("import os\nvars['result']=os.environ"))
         self.assertTrue(code_problems("vars['result']=open('credentials').read()"))

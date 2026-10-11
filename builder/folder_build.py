@@ -138,7 +138,7 @@ def run_vectors(result):
     jobs = []
     nodes = result['workflow']['nodes']
     for test in tests:
-        node = nodes.get(test.get('node')) or {}
+        node = nodes.get(test.get('node')) or result['workflow'].get('global_nodes',{}).get(test.get('node')) or {}
         snippets = [t['function']['parameters']['properties']['code']['default']
                     for t in functions(node.get('pre_actions') or [])
                     if t['function'].get('handler') == '__function__:code_exec']
