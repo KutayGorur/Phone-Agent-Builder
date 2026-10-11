@@ -25,9 +25,8 @@ ROLES = {'policy', 'integration', 'scenario', 'fixture', 'operations'}
 SAFE_MODULES = {'json', 're', 'datetime', 'decimal', 'math', 'calendar', 'unicodedata'}
 
 
-def source_answer_cache(trace_dir, purpose, instructions, prompt, current_session):
-    """Reuse only exact, recorded source extraction; never a compiled agent."""
-    if purpose not in {'classify document roles', 'derive source requirements'}:
+def _recorded_answer_cache(trace_dir, purpose, instructions, prompt, current_session, allowed):
+    if purpose not in allowed:
         return None
     paths = sorted(Path(trace_dir).glob('*.model.jsonl'), key=lambda p:p.stat().st_mtime, reverse=True)
     for path in paths:
@@ -46,6 +45,34 @@ def source_answer_cache(trace_dir, purpose, instructions, prompt, current_sessio
         except (ValueError, KeyError, OSError):
             continue
     return None
+
+
+def source_answer_cache(trace_dir, purpose, instructions, prompt, current_session):
+    """Reuse only exact, recorded source extraction."""
+    return _recorded_answer_cache(trace_dir,purpose,instructions,prompt,current_session,{'classify document roles','derive source requirements'})
+
+
+def validated_compiler_cache(trace_dir, purpose, instructions, prompt, current_session):
+    """Resume exact generation only after current static and semantic gates pass.
+
+    The complete source audit remains fresh in the calling build.
+    """
+    found=_recorded_answer_cache(trace_dir,purpose,instructions,prompt,current_session,{'compile document workflow'})
+    if not found:
+        return None
+    try:
+        result=extract_json(found['text'])
+        payload=json.loads(prompt)
+        workflow=result['workflow']
+        errors,_=workflow_problems(workflow,payload['specification'],payload['deployment_origin'])
+        required={r['id'] for r in payload['specification']['requirements']}
+        covered={r.get('requirement_id') for r in result.get('coverage',[])}
+        if errors or not required <= covered:
+            return None
+        run_vectors(result)
+        return found
+    except (ValueError, KeyError, TypeError, AttributeError, subprocess.SubprocessError):
+        return None
 
 
 def code_problems(code):
@@ -83,7 +110,7 @@ def run_vectors(result):
     runner = '''
 import builtins,json,sys
 jobs=json.load(sys.stdin)
-allowed={k:getattr(builtins,k) for k in ('abs','all','any','bool','dict','enumerate','Exception','float','int','isinstance','KeyError','len','list','map','max','min','next','range','repr','round','set','sorted','str','sum','tuple','TypeError','ValueError','zip','format')}
+allowed={k:getattr(builtins,k) for k in ('abs','all','any','bool','chr','ord','divmod','filter','reversed','dict','enumerate','Exception','float','int','isinstance','KeyError','len','list','map','max','min','next','range','repr','round','set','sorted','str','sum','tuple','TypeError','ValueError','zip','format')}
 modules={'json','re','datetime','decimal','math','calendar','unicodedata'}
 def importer(name,*args,**kwargs):
     if name.split('.')[0] not in modules: raise ImportError(name)
@@ -261,9 +288,11 @@ def build_folder(args):
         with session.open('a', encoding='utf-8') as log:
             log.write(trace.redact(json.dumps({'type':'request', 'purpose':purpose, 'instructions':instructions, 'prompt':prompt}, ensure_ascii=False)) + '\n')
         reused = source_answer_cache(trace_dir, purpose, instructions, prompt, session)
+        if not reused:
+            reused = validated_compiler_cache(trace_dir, purpose, instructions, prompt, session)
         if reused:
             answer = reused['text']
-            t.note('reusing exact recorded source extraction: ' + reused['reused_from'])
+            t.note('reusing exact recorded and validated model answer for ' + purpose + ': ' + reused['reused_from'])
         else:
             call_limit = 900 if purpose in {'compile document workflow','repair workflow contract'} else 540
             answer = complete(purpose, instructions, prompt, timeout=min(call_limit, left-20), max_tokens=32000)

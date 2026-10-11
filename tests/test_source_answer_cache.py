@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from builder.folder_build import source_answer_cache
+from unittest.mock import patch
+from builder.folder_build import source_answer_cache,validated_compiler_cache
 
 
 class SourceCacheTests(unittest.TestCase):
@@ -28,6 +29,19 @@ class SourceCacheTests(unittest.TestCase):
             path.write_text(json.dumps(request)+'\n',encoding='utf-8')
             self.assertIsNone(source_answer_cache(folder,request['purpose'],'rules','source',path))
             self.assertIsNone(source_answer_cache(folder,request['purpose'],'rules','source',Path(folder)/'new.model.jsonl'))
+
+    def test_compiler_resume_requires_current_contract_coverage_and_semantics(self):
+        result={'workflow':{'nodes':{}},'coverage':[{'requirement_id':'R1'}],'tests':[]}
+        found={'text':json.dumps(result),'reused_from':'old','answer_sha256':'hash'}
+        payload=json.dumps({'specification':{'requirements':[{'id':'R1'}]},'deployment_origin':'https://mock.example'})
+        with patch('builder.folder_build._recorded_answer_cache',return_value=found), patch('builder.folder_build.workflow_problems',return_value=([],[])), patch('builder.folder_build.run_vectors',return_value='PASS') as vectors:
+            self.assertEqual(validated_compiler_cache('.', 'compile document workflow','rules',payload,Path('current')),found)
+            vectors.assert_called_once_with(result)
+        with patch('builder.folder_build._recorded_answer_cache',return_value=found), patch('builder.folder_build.workflow_problems',return_value=(['invalid contract'],[])), patch('builder.folder_build.run_vectors') as vectors:
+            self.assertIsNone(validated_compiler_cache('.', 'compile document workflow','rules',payload,Path('current')))
+            vectors.assert_not_called()
+        with patch('builder.folder_build._recorded_answer_cache',return_value=found), patch('builder.folder_build.workflow_problems',return_value=([],[])), patch('builder.folder_build.run_vectors',side_effect=ValueError('wrong result')):
+            self.assertIsNone(validated_compiler_cache('.', 'compile document workflow','rules',payload,Path('current')))
 
 
 if __name__=='__main__':

@@ -11,6 +11,11 @@ class FolderCompilerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             run_vectors(result)
 
+    def test_standard_character_builtin_is_supported_in_semantic_harness(self):
+        tool={'type':'function','function':{'handler':'__function__:code_exec','parameters':{'properties':{'code':{'default':"vars['result'] = chr(65)"}}}}}
+        result={'workflow':{'nodes':{'compute':{'pre_actions':[tool]}}},'tests':[{'name':'standard character conversion','node':'compute','vars':{},'expect_vars':{'result':'A'}}]}
+        self.assertIn('PASS 1',run_vectors(result))
+
     def test_unsupported_generated_code_is_rejected_without_execution(self):
         self.assertTrue(code_problems("import os\nvars['result']=os.environ"))
         self.assertTrue(code_problems("vars['result']=open('credentials').read()"))
