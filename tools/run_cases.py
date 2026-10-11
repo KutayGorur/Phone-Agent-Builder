@@ -4,7 +4,7 @@
 
 Needs FREYA_API_KEY (your workspace) and FREYA_BANK_TEAM_KEY (any secret of 16+ characters your team picks, the same one every time).
 """
-import argparse, hashlib, json, os, pathlib, sys, time
+import argparse, datetime, hashlib, json, os, pathlib, sys, time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "tools"))
 import freya
@@ -81,6 +81,35 @@ def main():
         pathlib.Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         json.dump({"agent_id": a.agent_id, "simulation_id": sim_id, "iteration_id": it_id, "seconds": round(total_s), "passed": n, "total": len(final), "runs": a.reps, "final": final, "rows": reps[-1], "all_rows": reps}, open(a.out, "w"), indent=1)
 
+def call_waits(call):
+    """Measure customer-visible silence, including a final unanswered turn.
+
+    Extraction/routing/tool events are not spoken replies. A caller who waits
+    until the call ends must not look like a zero-latency success.
+    """
+    last_user, worst = None, 0.0
+    for m in call.get('messages', []):
+        t = m.get('secondsFromStart')
+        if not isinstance(t, (int, float)):
+            continue
+        if m.get('role') == 'user':
+            last_user = t
+        elif m.get('role') == 'assistant' and last_user is not None:
+            worst = max(worst, t - last_user)
+            last_user = None
+    unanswered = None
+    if last_user is not None:
+        try:
+            start = datetime.datetime.fromisoformat(call['startedAt'].replace('Z', '+00:00'))
+            end = datetime.datetime.fromisoformat(call['endedAt'].replace('Z', '+00:00'))
+            unanswered = max(0.0, (end - start).total_seconds() - last_user)
+            worst = max(worst, unanswered)
+        except (KeyError, TypeError, ValueError):
+            # Unknown end time is incomplete evidence, never a zero-second wait.
+            return None, None
+    return round(worst, 1), None if unanswered is None else round(unanswered, 1)
+
+
 def run_once(agent_id, cases, ids):
     """One simulation: every case once. Returns the scored rows."""
     sessions = {c["id"]: http("/v1/practice/sessions", {"case": c["id"]})["variables"] for c in cases}
@@ -105,17 +134,15 @@ def run_once(agent_id, cases, ids):
         if not r["call_id"]: continue
         try: call = freya.get_call(r["call_id"])
         except Exception: continue
-        last_user, worst = None, 0.0
-        for m in call.get("messages", []):
-            t = m.get("secondsFromStart")
-            if t is None: continue
-            if m.get("role") == "user": last_user = t
-            elif last_user is not None: worst = max(worst, t - last_user); last_user = None if m.get("role") == "assistant" else last_user
-        r["slowest_turn_s"] = round(worst, 1); r["ended"] = call.get("endedReason"); waits.append(worst)
+        worst, unanswered = call_waits(call)
+        r["slowest_turn_s"] = worst
+        r["unanswered_wait_s"] = unanswered
+        r["ended"] = call.get("endedReason")
+        if worst is not None: waits.append(worst)
     if waits:
         waits.sort(); med = waits[len(waits) // 2]; hung = sum(r.get("ended") == "customer-ended-call" and not r["pass"] for r in rows)
         print(f"\nslowest agent turn per call: median {med:.0f} s, worst {waits[-1]:.0f} s. Failed calls where the customer hung up: {hung}.")
-        if med > 10: print("WARNING: the phone agent was slow in this run. If the same agent is fast in another run, the model was busy and this score is too low.")
+        if med > 10: print("WARNING: latency exceeds the 10-second gate. Investigate platform delays and missing dispatch before robustness runs.")
     return rows, sim_id, it_id, status, took, (med if waits else 0)
 
 if __name__ == "__main__": main()
