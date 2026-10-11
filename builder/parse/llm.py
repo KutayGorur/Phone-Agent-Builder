@@ -51,6 +51,11 @@ def _call_cli(model, system, prompt, timeout):
     cmd = [exe, "-p", "--model", model, "--output-format", "json", "--tools", "",
            "--no-session-persistence", "--system-prompt",
            "You are a precise component of a software pipeline. Follow the instructions in the user message and answer exactly in the format they ask for."]
+    effort = os.environ.get('PARSER_EFFORT')
+    if effort:
+        if effort not in {'low','medium','high','xhigh','max'}:
+            raise ValueError('invalid PARSER_EFFORT')
+        cmd += ['--effort', effort]
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_CODE") and k != "CLAUDECODE"}
     with tempfile.TemporaryDirectory() as cwd:   # empty cwd: no project memory or settings leak into the call
         # the long instructions go through stdin: a Windows command line is limited to about 32k characters
