@@ -478,36 +478,52 @@ def usable(raw):
     """A product the bank sent without an id, a finite amount past due or the days late cannot be spoken about or
     recorded. An unfamiliar type is kept: it is the bank's own data and the spec's type list may be incomplete."""
     try:
-        if not str(raw.get('product_id') or '').strip():
+        if isinstance(raw.get('product_id'), bool) or not str(raw.get('product_id') or '').strip():
             return False
-        pd = float(raw.get(pd_field(raw)))
-        if pd != pd or pd in (float('inf'), float('-inf')):
-            return False
-        return pd > 0 and int(float(raw.get(days_field(raw)))) >= 0
+        pd = finite_number(raw.get(pd_field(raw)))
+        days = finite_number(raw.get(days_field(raw)))
+        return pd is not None and pd > 0 and days is not None and days >= 0 and days == int(days)
     except Exception:
         return False
+
+
+def finite_number(value):
+    """Tool numeric data must be finite; bool is not a bank amount or counter."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+        return number if number == number and number not in (float('inf'), float('-inf')) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def floor_for(raw):
     f = (E.get('floor_field') or {}).get(raw.get('type'))
     try:
-        v = float(raw.get(f)) if f and raw.get(f) not in (None, '') else None
+        v = finite_number(raw.get(f)) if f and raw.get(f) not in (None, '') else None
     except Exception:
         v = None
     fm = (E.get('formula') or {}).get(raw.get('type'))
     if v is None and isinstance(fm, dict):
         try:
-            base = float(raw.get(fm.get('field') or pd_field(raw)))
-            v = round(base * float(fm.get('percent_of_field')) / 100.0 + 0.004999, 2)
+            base = finite_number(raw.get(fm.get('field') or pd_field(raw)))
+            percent = finite_number(fm.get('percent_of_field'))
+            if base is None or percent is None:
+                return None
+            v = round(base * percent / 100.0 + 0.004999, 2)
             g = fm.get('greater_of')
             if g and raw.get(g) not in (None, ''):
-                v = max(v, float(raw.get(g)))
+                other = finite_number(raw.get(g))
+                if other is None:
+                    return None
+                v = max(v, other)
             rd = fm.get('round')
             if rd:
                 v = round_to(v, rd)
         except Exception:
             v = None
-    return v
+    return finite_number(v)
 
 
 def round_to(v, rd):

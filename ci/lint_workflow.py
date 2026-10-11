@@ -26,6 +26,12 @@ def lint(wf, openapi=None):
     # transitions point at real nodes; every node reachable; every non-end node has a way out
     edges = {}
     for name, n in allnodes.items():
+        schema = n.get('extraction_schema') or []
+        field_names = [f.get('name') for f in schema if isinstance(f, dict)]
+        if len(field_names) != len(schema) or any(not isinstance(f, str) or not f.strip() for f in field_names):
+            errs.append(f"{name}: extraction fields must have nonempty string names")
+        elif len(field_names) != len(set(field_names)):
+            errs.append(f"{name}: duplicate extraction field names")
         tgts = []
         for t in n.get("transitions") or []:
             tg = t.get("target_node")
