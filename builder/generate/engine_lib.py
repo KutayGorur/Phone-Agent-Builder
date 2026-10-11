@@ -492,11 +492,11 @@ def multi(st):
     return len(st['prods']) > 1
 
 
-def facts(st):
+def facts(st, hide_floor=False):
     lines = []
     for p in st['prods']:
         s = '%s: %s %s, %d days %s' % (p['label'], money(p['pd']), E['pd_word'], p['dl'], E['days_word'])
-        if p['fl'] and p['fl'] < p['pd']:
+        if p['fl'] and p['fl'] < p['pd'] and not hide_floor:
             s += ', %s %s' % (floor_word(p), money(p['fl']))
         if p['dead']:
             s += ', latest promise date %s' % dstr(from_iso(p['dead']))
@@ -552,14 +552,19 @@ def cur_question(st):
 def reask(st, lead='', kind='question', then=True):
     """The customer said something that needs no policy change: answer it and ask the pending question again."""
     q = cur_question(st)
+    offered = False
     if not st.get('hard_pending') and st['phase'] != 'confirm' and not st['all']:
         pe = st['prods'][st['cur']].get('pend')
-        if pe and pe.get('k') == 'attempt' and pe.get('d'):
-            q = 'Can you do that on %s?' % dstr(from_iso(pe['d']))   # an offer already made is answered, not repeated
+        if pe and pe.get('k') == 'attempt':
+            offered = True                                          # an offer is on the table: no figure is named a second time
+            if pe.get('d'):
+                q = 'Can you do that on %s?' % dstr(from_iso(pe['d']))   # an offer already made is answered, not repeated
+    amount_rule = (' The offer is already made: if they ask how much you can do, for a lower amount or what the figure is, say only "That is the amount I mentioned." '
+                   'and name no amount.') if offered else ''
     ans = ('The customer asked something or said something unclear. First reply to it in one short sentence: '
-           'use only these facts: ' + facts(st) + '. If the facts do not answer it, say exactly "' +
+           'use only these facts: ' + facts(st, hide_floor=offered) + '. If the facts do not answer it, say exactly "' +
            E['unknown_say'] + '". Never invent figures, dates or reasons, and never offer a discount, waiver or '
-           'payment plan. If they ask whether you are a robot or an AI, say "' + E['ai_say'] + '". '
+           'payment plan.' + amount_rule + ' If they ask whether you are a robot or an AI, say "' + E['ai_say'] + '". '
            'If they ask whether this call is a scam, say that ' + E['scam_say'] + '.' + (' Then say: ' + q if then else ''))
     ask((lead + ' ' if lead else '') + ans)
 
@@ -1026,7 +1031,7 @@ def turn(st):
         return
     if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text'):
         core = vars['say_text']
-        ask('The customer also asked a question. First answer it in one short sentence, using only these facts: ' + facts(st) +
+        ask('The customer also asked a question. First answer it in one short sentence, using only these facts: ' + facts(st, hide_floor=True) +
             '. If the facts do not answer it, say exactly "' + E['unknown_say'] + '". If they ask whether you are a robot or an AI, say "' +
             E['ai_say'] + '". If they ask whether this call is a scam, say that ' + E['scam_say'] +
             '. Never invent figures, dates or reasons. Then say exactly this, word for word: ' + core)

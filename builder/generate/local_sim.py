@@ -45,10 +45,11 @@ def drive_identity(spec, case, bank, sess, cid, raw=False):
     return bank.ledger(cid) if raw else score_ledger(case, bank.ledger(cid))
 
 
-def drive(spec, case, steps, verbose=False, api=None, cases=None, raw=False, cycle=False):
+def drive(spec, case, steps, verbose=False, api=None, cases=None, raw=False, cycle=False, said=None):
     """steps: one dict of extraction vars (x_intent, x_date, ... or tp_event ...) per customer turn.
     raw: return the bank's ledger instead of the score. cycle: when the steps run out (or the call closes early) the
-    customer repeats the last step until the call closes, and steps left after the close are ignored (generated scenarios)."""
+    customer repeats the last step until the call closes, and steps left after the close are ignored (generated scenarios).
+    said: a list that receives the engine's instruction text for every spoken turn."""
     code = engine_code(build_E(spec))
     bank = Bank(api or API, cases or CASES)
     sess = bank.new_session(case['id'])['variables']
@@ -76,6 +77,8 @@ def drive(spec, case, steps, verbose=False, api=None, cases=None, raw=False, cyc
         if v.get('engine_err'):
             raise RuntimeError(v['engine_err'])
         r = v.get('route')
+        if said is not None and r in ('say', 'tp_say', 'ask'):
+            said.append(v.get('instruction') or '')
         if verbose:
             print('   route=%s %s' % (r, (v.get('instruction') or '')[-200:] if r in ('say', 'tp_say') else ''))
         return r
