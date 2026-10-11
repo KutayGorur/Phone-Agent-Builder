@@ -1,5 +1,5 @@
 # Sim slot lock
 
-(currently free)
+Reserved by Codex for Kutay's platform retry, 2026-10-11 11:44 UTC.
 
-Numeric candidate update returned from PUT but follow-up GET and export retry returned HTTP 504 before publish. Check for a newer unpublished A draft; last confirmed published A v8/A+B v3. No sims running from this attempt.
+Version list confirms A v9 unpublished and v8 published. A draft read succeeded and matches all current generator fields (platform defaults added); fixed model verified. Resume the existing draft, then chat gate and small simulations before widening. No simulation started yet; A+B read returned 504.
