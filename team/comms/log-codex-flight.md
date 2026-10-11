@@ -47,3 +47,36 @@
 - Known pre-existing limitation from log-retest-0811.md: practice K's renamed routes are not mapped, so it degrades. Our nonzero exit now makes this condition actionable.
 
 - Final inventory independently verified: eight workflows; kept A v6, A+B v2, D v2. Backed up local .freya-agents.json and remapped brief-a, brief-a-brief-b and brief-d slots to those kept IDs; removed slot entries pointing at deleted IDs. This prevents a later local practice build from recreating the deleted workflows. State remains gitignored.
+
+## Platform stability tests requested by Kutay, 2026-10-11
+
+Main was unchanged after ff190ad. Local gates remained green (269 logic tests, parser selftest, local_sim 0 FAIL). Exported the existing A v6 and A+B v2 workflows, checked the fixed experimental-5 agent model, and validated both graphs with Freya: zero errors/warnings. The linter only accepts generated graph JSON or the single-key workflow envelope, not the real export metadata envelope; lint inputs were copies of the exported graph without platform-added agent_config. The original exports and published workflows were unchanged. Graph digests: A eac9914265f9d99e, A+B 320dda49e8b3a2e4 (SHA-256 prefixes over canonical JSON of the lint input).
+
+Took and published the shared sim lock before testing. All three runs went through ci/sim.py with --why, one simulation at a time, and are in the local results/sim-ledger.csv. No application code, Freya workflows or parser configuration changed.
+
+| Run | Calls | Result | Simulation | Duration | Median worst turn per call |
+|---|---:|---|---|---:|---:|
+| Targeted A: PUB-04 dates, PUB-06 amounts, PUB-10 failed-tool retry | 3 | 3/3 | 0ee1117e-03d9-45c8-a416-07fc35b82791 | 116 s | 17 s |
+| Full A, one repetition | 10 | 9/10 | a53768f1-2aa4-4cf2-ad15-0bd36135bf8a | 170 s | 9 s |
+| B-only on kept A+B agent, one repetition | 3 | 3/3 | 3444b8a0-0cbf-4fc4-aca2-6c2efc6cb74e | 75 s | 13 s |
+
+Total: 16 customer calls, 15 passes including repeated targeted cases. The full A/B suites passed 12 of 13 distinct customers. All bank-record checks passed; the only failure was the conversation/policy check for A PUB-05. This is a drop from the immediately preceding A 10/10 result on the SAME workflow version, evidence of speech variance. B passed all three B-specific cases; this B-only result is not a retest of all 13 cases against the combined workflow. Three repetitions were not attempted: a real policy violation already exists, and targeted/B latency was above TEST_PLAN's slow-turn threshold. Paused 45 seconds after the initial slow run before the single A milestone. No failed A case was re-simulated.
+
+### Confirmed remaining problem: free-form reply resumes repayment after hardship
+
+Failed call: c4a6b975-356b-4a51-85a2-b8aa94d398b6, in the full-A simulation above.
+
+1. Customer states job loss, inability to pay anything, and asks for a discount.
+2. Agent gives sympathy and offers support. Customer explicitly declines transfer and repeats the discount question.
+3. Agent says it cannot offer discounts, then volunteers the full 780.00 on Friday 16 October and asks whether that works.
+4. Customer refuses. Agent finally closes no_promise / hardship. No promise was recorded, so ledger checks pass, but the spoken proposal breaches hardship/no-persuasion policy. The judge calls it a payment plan; irrespective of that label, the transcript confirms an unsolicited repayment proposal after hardship.
+
+The actual extractor classified the decline-plus-discount question as x_intent=sp_restructuring with x_q=yes. The hard_pending state nevertheless handled it as declining support and selected no_promise/hardship correctly. The engine's next state had nopers=hardship, product status=noted, and defer=fin. Its instruction explicitly said "Answer it, then ask nothing further", "Never invent figures, dates or reasons", and "never offer a discount, waiver or payment plan". The speech model added a full-amount Friday proposal despite that instruction. This is not a false judge failure and not a ledger outcome bug.
+
+Gate-1 diagnosis: saved the real transcript and replayed the actual published code_exec code with the actual prior variable snapshot plus the captured extraction (sp_restructuring, question=yes). Replay selected route=ask, close=no_promise/hardship, defer=fin; the instruction contained the no-offer/no-followup constraints and no Friday 16 October proposal. Assertions passed. This reproduces the vulnerable instruction path locally, but does not reproduce stochastic speech with a deterministic engine test. Existing local_sim cannot detect this violation because it supplies extractions and checks the ledger instead of running the speech model.
+
+Proposed generic fix for the generator owner: keep post-hardship/terminal question replies under deterministic speech control. For unsupported questions, use the brief's fixed unknown-question answer through TTS, then the existing closing, without another free-form conversational turn. For supported questions, use bounded answer templates chosen from the spec rather than offering unrestricted financial facts and asking the model to compose a reply. Preserve legitimate AI/scam/account questions required by the brief. Strengthening the negative prompt alone is not a reliable fix: the exact prohibition was already present in this failed call. Do not change the fixed agent model, record a false promise, or relabel the correct hardship close to mask the conversation failure.
+
+Acceptance checks: unsupported discount request after declining support; no-transfer plus a question in one sentence; a repeated question; a supported balance question after hardship; a volunteered valid payment offer after hardship (which the brief allows) must remain distinct from the agent proposing one. Verify no renewed amount/date offers, no forbidden terms offered, correct hardship closing, and no extra follow-up question. Add meaningful offline state/graph checks for the deterministic reply path, then only target PUB-05 through ci/sim.py after local gates pass. A failed unchanged case must not be re-run merely to seek a green sample. Robustness remains unproven until an appropriate 3/3 run on a fixed candidate.
+
+Local artifacts (gitignored): results/codex-platform-targeted.json, results/codex-platform-a.json, results/codex-platform-b.json, results/codex-platform-pub05-call.json, results/codex-platform-pub05-replay.json; runner logs and original workflow exports under out/codex-check/. Raw transcripts/exports are not committed because they can contain platform/tool configuration. The narrative above is the shareable handoff. The Claude parser access risk from the fresh-clone test also remains open.
