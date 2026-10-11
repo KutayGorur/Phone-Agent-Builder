@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(_HERE)))
 from builder.logic import snippet_lib as SL  # noqa: E402
 from builder.generate.ecfg import blocking_warnings, build_E_warn, first_sentence  # noqa: E402
 from builder.generate.sanitize import describe_notes, sanitize_spec  # noqa: E402
+from builder.generate import identity as IDN  # noqa: E402
 
 DEFAULT_BASE = 'https://freya-bank-mock.freyavoice.workers.dev/v1/'
 BASE = DEFAULT_BASE          # set per spec by generate(): spec['tools_server'] when present
@@ -225,14 +226,12 @@ def lit(x):
 
 # ------------------------------------------------------------------ hooks for identity tools
 
-def verify_pre(q, E):
-    fmt = (q.get('format') or '').lower()
+def verify_pre(q, E, hint=''):
+    """pre_process hook of one identity question: dates through the date normaliser, the other schemes through
+    builder/generate/identity.py (digits, letters-and-digits, free text)."""
     field = (q.get('field') or '').lower()
-    dob = 'yyyy' in fmt or 'birth' in field or 'date' in field
-    digits = None
-    m = re.search(r'(\d+)\s*digit', fmt) or re.search(r'last(\d+)', field)
-    if m:
-        digits = int(m.group(1))
+    sch = IDN.scheme(q, hint)
+    dob = sch['kind'] == 'date'
     funcs = ''
     if dob:
         funcs = '\n'.join(inspect.getsource(f) for f in (SL.parse_now, SL._expand_year, SL._build_dob, SL.normalize_dob))
@@ -242,18 +241,10 @@ def verify_pre(q, E):
         body += ("        today, _m = parse_now(vars.get('now'))\n"
                  "        s, val, amb = normalize_dob(a, %s, today)\n"
                  "        if s == 'ok' and val:\n            a = val\n" % repr({'dob_order': E['cal'].get('dob_order')}))
-    elif digits:
-        key = 'part_%s' % re.sub(r'[^a-z0-9_]', '', field)
-        body += ("        dg = re.sub(r'[^0-9]', '', a)\n"
-                 "        prev = str(vars.get('%s') or '')\n"
-                 "        if 0 < len(dg) < %d and len(prev + dg) == %d:\n            dg = prev + dg\n            prev = ''\n"
-                 "        elif 0 < len(dg) < %d:\n            prev = dg\n"
-                 "        else:\n            prev = ''\n"
-                 "        vars['%s'] = prev\n"
-                 "        if len(dg) >= %d:\n            a = dg[-%d:]\n" % (key, digits, digits, digits, key, digits, digits))
+    else:
+        body += IDN.hook_body(sch, field)
+        funcs = 'import re\n' + IDN.helpers_code() if sch['kind'] in ('digits', 'text', 'alnum') else 'import re\n'
     body += "        b['answer'] = a\nexcept Exception:\n    pass\n"
-    if not dob:
-        funcs = 'import re\n'
     return check_code(funcs + body, 'verify_pre')
 
 
@@ -344,6 +335,9 @@ def generate(spec):
     op = spec.get('opening') or {}
     idn = spec.get('identity') or {}
     qs = idn.get('questions') or []
+    _tl = spec.get('tools') or {}
+    _tl = _tl.get('tools') if isinstance(_tl.get('tools'), dict) else _tl
+    answer_desc = str((((_tl.get(idn.get('tool') or 'verify_identity') or {}).get('fields') or {}).get('answer') or {}).get('description') or '')
     n = len(qs)
     multi = bool(E['use_notes'] or meta.get('multi_product'))
     forb = ', '.join('"%s"' % w for w in (op.get('forbidden_words_before_verification') or []))
@@ -430,7 +424,7 @@ def generate(spec):
         tool = 'verify_%s' % q.get('field')
         nxt = 'idq_%d' % (i + 1) if i < n else 'get_account'
         fn = api_fn(tool, {'field': ('string', q.get('field')), 'answer': ('string', '{{answer}}')},
-                    pre=verify_pre(q, E), post=verify_post(q, i, n), retries=1, path=idn.get('tool') or 'verify_identity',
+                    pre=verify_pre(q, E, IDN.field_hint(answer_desc, q.get('field'))), post=verify_post(q, i, n), retries=1, path=idn.get('tool') or 'verify_identity',
                     description='CALL this every time the customer gives %s. Pass exactly what the customer said (%s). Never call it without an answer '
                                 'given in this call, never with only a part of the answer, and never guess one.' % (q.get('ask'), q.get('format') or 'as said'))
         fn['function']['parameters']['properties']['body']['properties']['answer']['description'] = (
