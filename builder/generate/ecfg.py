@@ -261,6 +261,63 @@ def mp_flag_warnings(mp):
     return out
 
 
+_AMT_KEY = re.compile(r'past_?due|amount|overdue|arrears|outstanding|balance|owed', re.I)
+_NOT_AMT_KEY = re.compile(r'floor|minimum|\bmin\b|instal|percent|round|format|currency|first_ask|accept|offer', re.I)
+
+
+def _by_type_fields(d, kind):
+    """{product type: field} from any `<something>_by_product` object of a spec section: kind 'amount' (the past-due amount)
+    or 'days' (days late). The parser has used amount_field_by_product, past_due_field_by_product and similar spellings."""
+    out = {}
+    for k, v in (d or {}).items():
+        if not isinstance(v, dict) or not re.search(r'by_(product|type)', str(k)):
+            continue
+        if kind == 'days':
+            ok = re.search(r'days', str(k), re.I)
+        else:
+            ok = _AMT_KEY.search(str(k)) and not _NOT_AMT_KEY.search(str(k)) and not re.search(r'days', str(k), re.I)
+        if ok:
+            for t, f in v.items():
+                if isinstance(f, str) and f:
+                    out[str(t)] = f
+    return out
+
+
+def amount_fields(spec, items, f_pd, f_days, floor_field, warns):
+    """-> (past-due amount field per product type, days-late field per product type). Order: the spec's per-product mapping,
+    then a field the tool API describes as belonging to this type alone, then the one common field (f_pd / f_days). A type
+    whose resolved amount field get_account does not return is a blocking warning: the product would be left out of the call."""
+    amts, ds = spec.get('amounts') or {}, spec.get('debt_statement') or {}
+    pd_map = {**_by_type_fields(ds, 'amount'), **_by_type_fields(amts, 'amount')}
+    days_map = {**_by_type_fields(ds, 'days'), **_by_type_fields(amts, 'days')}
+    types = [str(t) for t in ((items.get('type') or {}).get('enum') or [])]
+
+    def desc_types(field):
+        d = str((items.get(field) or {}).get('description') or '').lower()
+        return [t for t in types if re.search(r'(?<![a-z0-9_])' + re.escape(t.lower()) + r'(?![a-z0-9_])', d)]
+    floors = {f for f in floor_field.values() if f}
+    for t in types:
+        if t in pd_map:
+            continue
+        if f_pd in items and (not desc_types(f_pd) or t in desc_types(f_pd)):
+            continue
+        cands = [f for f, v in items.items() if isinstance(v, dict) and v.get('type') == 'number' and f not in floors
+                 and t in desc_types(f) and not _NOT_AMT_KEY.search(f)]
+        if len(cands) == 1:
+            pd_map[t] = cands[0]
+    if items:
+        for t in types:
+            f = pd_map.get(t, f_pd)
+            if t not in pd_map and f in items and desc_types(f) and t not in desc_types(f):
+                warns.append('product type %s has no amount field: %r is described for %s only' % (t, f, ', '.join(desc_types(f))))
+            elif f not in items:
+                warns.append('product type %s has no amount field: get_account does not return %r (the product would be left out of the call)' % (t, f))
+        for t, f in list(pd_map.items()) + list(days_map.items()):
+            if f not in items:
+                warns.append('per-product field %s for %s is not returned by get_account' % (f, t))
+    return pd_map, days_map
+
+
 def _build(spec, warns_out):
     cal = config_from_spec(spec)
     meta = spec.get('meta') or {}
@@ -404,6 +461,7 @@ def _build(spec, warns_out):
     f_pd = amts.get('past_due_field') or (inc[0] if len(inc) > 0 else 'past_due')
     b0 = (spec.get('bands') or [{}])[0]
     f_days = b0.get('days_late_field') or (inc[1] if len(inc) > 1 else 'days_late')
+    pd_by_type, days_by_type = amount_fields(spec, items, f_pd, f_days, floor_field, warns)
     pd_word = 'past due' if 'past' in f_pd else 'overdue'
     days_word = 'late' if 'late' in f_days else ('past due' if 'past' in f_days else 'overdue')
     first_q = pers.get('first_question') or 'Can you make this payment today?'
@@ -414,7 +472,7 @@ def _build(spec, warns_out):
     mwho = re.search(r'with (.+?)\?', cq)
     who = (mwho.group(1) if mwho else '{title} {last_name}').replace('{', '{{').replace('}', '}}')
     E = {
-        'cal': cal, 'acct_node': 'get_account', 'f_pd': f_pd, 'f_days': f_days, 'pd_word': pd_word, 'days_word': days_word,
+        'cal': cal, 'acct_node': 'get_account', 'f_pd': f_pd, 'f_days': f_days, 'pd_by_type': pd_by_type, 'days_by_type': days_by_type, 'pd_word': pd_word, 'days_word': days_word,
         'who': who, 'formula': formula, 'pn': ds.get('product_names') or {}, 'floor_field': floor_field,
         'floor_word': floor_word, 'first_q': first_q, 'first_q_all': 'Can you pay all of these today?',
         'confirm_q': conf.get('confirm_question') or 'Do you confirm?',
@@ -464,7 +522,8 @@ def _ack_scope(conf, warns):
 
 # Warnings that mean the compiler substituted a guess for a mandatory meaning (as opposed to a field it ignores or a
 # harmless fallback). The build labels such a spec degraded.
-BLOCKING_MARKS = (' dropped: ',   # a malformed spec section the compiler had to drop (a coerced one is only a warning)
+BLOCKING_MARKS = ('has no amount field',
+                  ' dropped: ',   # a malformed spec section the compiler had to drop (a coerced one is only a warning)
                   'is not a known date rule', 'could be the promise outcome', 'no outcome without reasons',
                   'is mapped to two roles', 'taken from the text of "when"')
 
@@ -495,8 +554,8 @@ CONSUMED = {
                'accepted_confirmations', 'not_confirmations', 'on_unclear', 'ai_question_answer'},
     'third_party': {'callback', 'wrong_number', 'deceased', 'say_nothing_beyond_opening', 'relative_may_not_verify_or_pay'},
     'identity': {'questions', 'tool', 'on_declined', 'on_failed', 'hints'},
-    'debt_statement': {'say', 'product_names', 'include'},
-    'amounts': {'past_due_field', 'floor_field_by_product', 'floor_formula_by_product', 'floor_percent_by_product', 'floor_percentage_by_product'},
+    'debt_statement': {'say', 'product_names', 'include', 'amount_field_by_product', 'days_late_field_by_product'},
+    'amounts': {'past_due_field', 'past_due_field_by_product', 'amount_field_by_product', 'days_late_field_by_product', 'floor_field_by_product', 'floor_formula_by_product', 'floor_percent_by_product', 'floor_percentage_by_product'},
     'persuasion': {'first_question', 'attempts', 'on_exhausted'},
     'confirmation': {'confirm_question', 'after_recorded_say', 'create_promise_max_tries', 'on_create_failed',
                      'acknowledgement_scope', 'after_recorded_say_after_each_record'},
@@ -518,6 +577,8 @@ def ignored_fields(spec):
         if not isinstance(d, dict):
             continue
         for k, v in d.items():
+            if sec in ('amounts', 'debt_statement') and (_by_type_fields({k: v}, 'amount') or _by_type_fields({k: v}, 'days')):
+                continue                                  # a per-product amount / days field map, read by amount_fields
             if k not in keep and k not in _PARSER_META and v not in (None, False, '', [], {}):
                 out.append('spec field %s.%s is not read by the compiler (fixed engine behaviour or unsupported)' % (sec, k))
     return out

@@ -398,16 +398,28 @@ def label_for(raw):
     return re.sub(r'\{(\w+)\}', rep, tpl).strip()
 
 
+def pd_field(raw):
+    """The field holding this product's past-due amount: the type's own field when the spec or API names one and the bank
+    sent it, else the common field."""
+    f = (E.get('pd_by_type') or {}).get(raw.get('type'))
+    return f if f and raw.get(f) not in (None, '') else E['f_pd']
+
+
+def days_field(raw):
+    f = (E.get('days_by_type') or {}).get(raw.get('type'))
+    return f if f and raw.get(f) not in (None, '') else E['f_days']
+
+
 def usable(raw):
     """A product the bank sent without an id, a finite amount past due or the days late cannot be spoken about or
     recorded. An unfamiliar type is kept: it is the bank's own data and the spec's type list may be incomplete."""
     try:
         if not str(raw.get('product_id') or '').strip():
             return False
-        pd = float(raw.get(E['f_pd']))
+        pd = float(raw.get(pd_field(raw)))
         if pd != pd or pd in (float('inf'), float('-inf')):
             return False
-        return pd > 0 and int(float(raw.get(E['f_days']))) >= 0
+        return pd > 0 and int(float(raw.get(days_field(raw)))) >= 0
     except Exception:
         return False
 
@@ -421,7 +433,7 @@ def floor_for(raw):
     fm = (E.get('formula') or {}).get(raw.get('type'))
     if v is None and isinstance(fm, dict):
         try:
-            base = float(raw.get(fm.get('field') or E['f_pd']))
+            base = float(raw.get(fm.get('field') or pd_field(raw)))
             v = round(base * float(fm.get('percent_of_field')) / 100.0 + 0.004999, 2)
         except Exception:
             v = None
@@ -445,11 +457,11 @@ def read_products():
 
 def make_product(i, raw, today):
     try:
-        pd = float(raw.get(E['f_pd']))
+        pd = float(raw.get(pd_field(raw)))
     except Exception:
         pd = 0.0
     try:
-        days = int(float(raw.get(E['f_days'])))
+        days = int(float(raw.get(days_field(raw))))
     except Exception:
         days = 0
     band = band_for(days, CAL)

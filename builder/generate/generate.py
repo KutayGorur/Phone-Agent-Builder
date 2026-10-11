@@ -134,7 +134,7 @@ def tool_contract_problems(spec, wf):
     if items:
         try:
             E, _ = build_E_warn(spec)
-            for k in (E.get('f_pd'), E.get('f_days')):
+            for k in sorted({E.get('f_pd'), E.get('f_days'), *(E.get('pd_by_type') or {}).values(), *(E.get('days_by_type') or {}).values()} - {None}):
                 if k and k not in items:
                     probs.append('the engine reads product field %s, which get_account does not return' % k)
         except Exception as e:  # noqa: BLE001

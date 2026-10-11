@@ -20,6 +20,7 @@ Findings go to the trace as compiler gaps; nothing here changes the workflow.
 """
 import datetime as dt
 import json
+import re
 import os
 import sys
 
@@ -103,14 +104,31 @@ def _identity(spec):
     return qs, truth, wrong
 
 
+def pdf(E, ptype):
+    return (E.get('pd_by_type') or {}).get(ptype) or E['f_pd']
+
+
+def daysf(E, ptype):
+    return (E.get('days_by_type') or {}).get(ptype) or E['f_days']
+
+
+def _types_in(text, types):
+    low = str(text or '').lower()
+    return [t for t in types if re.search(r'(?<![a-z0-9_])' + re.escape(t.lower()) + r'(?![a-z0-9_])', low)]
+
+
 def make_product(E, items, ptype, days, pd=1000.0, nth=1):
     raw = {'product_id': 'p%d' % nth, 'type': ptype}
+    types = list(((items.get('type') or {}).get('enum')) or [])
     for k, v in items.items():
         if k in raw:
             continue
+        named = _types_in(v.get('description'), types)
+        if named and ptype not in named:
+            continue                                  # a field the API describes for other product types is not sent for this one
         raw[k] = '1234' if v.get('type') == 'string' else (100 if v.get('type') == 'integer' else 100.0)
-    raw[E['f_pd']] = pd
-    raw[E['f_days']] = days
+    raw[pdf(E, ptype)] = pd
+    raw[daysf(E, ptype)] = days
     ff = (E.get('floor_field') or {}).get(ptype)
     if ff:
         raw[ff] = round(pd / 4, 2)
@@ -126,19 +144,19 @@ def floor_of(E, raw):
     fm = (E.get('formula') or {}).get(raw.get('type'))
     if v is None and isinstance(fm, dict):
         try:
-            v = round(float(raw.get(fm.get('field') or E['f_pd'])) * float(fm.get('percent_of_field')) / 100.0 + 0.004999, 2)
+            v = round(float(raw.get(fm.get('field') or pdf(E, raw.get('type')))) * float(fm.get('percent_of_field')) / 100.0 + 0.004999, 2)
         except Exception:
             v = None
-    pd = float(raw[E['f_pd']])
+    pd = float(raw[pdf(E, raw.get('type'))])
     return pd if (v is None or v <= 0 or v > pd) else v
 
 
 def deadline_of(E, raw, today):
     cal = E['cal']
-    band = sl.band_for(raw[E['f_days']], cal)
+    band = sl.band_for(raw[daysf(E, raw.get('type'))], cal)
     bands = cal.get('bands') or []
     if band is None and bands:
-        band = bands[-1] if (bands[-1].get('max') is not None and int(raw[E['f_days']]) > bands[-1]['max']) else bands[0]
+        band = bands[-1] if (bands[-1].get('max') is not None and int(raw[daysf(E, raw.get('type'))]) > bands[-1]['max']) else bands[0]
     return sl.deadline_for(today, band, cal) if band else None
 
 
@@ -181,7 +199,7 @@ def invariants(spec, E, case, led):
         if p['product_id'] in seen:
             bad.append('two promises for %s' % p['product_id'])
         seen.add(p['product_id'])
-        fl, pd = floor_of(E, raw), float(raw[E['f_pd']])
+        fl, pd = floor_of(E, raw), float(raw[pdf(E, raw.get('type'))])
         if not (fl - 0.005 <= p['amount'] <= pd + 0.005):
             bad.append('promise amount %s outside floor %s..past due %s' % (p['amount'], fl, pd))
         try:
@@ -268,7 +286,7 @@ def scenarios(spec, E, tools, api_ok=True):
         dls = [d for d in (deadline_of(E, r, today) for r in raws) if d]
         dl = min(dls) if dls else None
         fl = min(floor_of(E, r) for r in raws)
-        pd = max(float(r[E['f_pd']]) for r in raws)
+        pd = max(float(r[pdf(E, r.get('type'))]) for r in raws)
         single = len(raws) == 1
         add(tag + 'pay_full', raws, now, [I('agree')], promised if single else None)
         add(tag + 'refuse_all', raws, now, [I('refuse')], (lambda E_, led, case: no_promise(E_, led, case) + (
