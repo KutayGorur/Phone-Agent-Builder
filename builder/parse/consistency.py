@@ -21,8 +21,27 @@ DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _compiled(spec):
-    from builder.generate.ecfg import build_E_warn
-    E, _ = build_E_warn(copy.deepcopy(spec))
+    """The compiler's reading of the spec. A spec the full compile rejects (an unrepaired second parse may) still gives the
+    parts that can be read on their own: calendar, bands, callback, floors, intents."""
+    from builder.generate import ecfg
+    s = copy.deepcopy(spec)
+    try:
+        E, _ = ecfg.build_E_warn(s)
+        return E
+    except Exception:  # noqa: BLE001
+        pass
+    s = copy.deepcopy(spec)
+    E = {"cal": ecfg.config_from_spec(s)}
+    for name, fn in (("floors", lambda: ecfg.floor_rules((s.get("amounts") or {}), "past_due", None)),
+                     ("intents", lambda: ecfg.normalize_intents(s))):
+        try:
+            v = fn()
+            if name == "floors":
+                E["floor_field"], E["formula"] = v
+            else:
+                E["intents"] = v
+        except Exception:  # noqa: BLE001
+            pass
     return E
 
 
@@ -43,8 +62,8 @@ def _f_bands(E, spec):
 
 
 def _f_floors(E, spec):
-    out = {t: ["field", f] for t, f in (E.get("floor_field") or {}).items() if f}
-    for t, fm in (E.get("formula") or {}).items():
+    out = {t: ["field", f] for t, f in (E["floor_field"] or {}).items() if f}
+    for t, fm in (E["formula"] or {}).items():
         if isinstance(fm, dict):
             out[t] = ["pct", fm.get("field"), fm.get("percent_of_field")]
     return out
@@ -69,7 +88,7 @@ def _f_outcomes(E, spec):
 
 def _f_queues(E, spec):
     out = {}
-    for it in (E.get("intents") or {}).values():
+    for it in E["intents"].values():
         if not isinstance(it, dict):
             continue
         q = it.get("queue") or ((it.get("on_accept") or {}).get("queue"))
@@ -79,7 +98,7 @@ def _f_queues(E, spec):
 
 
 def _f_persuasion(E, spec):
-    return [[p.get("n"), p.get("amt"), p.get("date"), p.get("bands")] for p in (E.get("pers") or [])]
+    return [[p.get("n"), p.get("amt"), p.get("date"), p.get("bands")] for p in E["pers"]]
 
 
 def _f_callback(E, spec):

@@ -380,7 +380,8 @@ def _build(spec, warns_out):
     cf = conf.get('on_create_failed') or {}
     cfr = cf.get('reason') or _oc(cf)['reason']
     if mp and mp.get('create_promise_failure'):
-        cfr = _oc({'note': (mp['create_promise_failure'] or {}).get('note')})['reason'] or cfr
+        cpf = mp['create_promise_failure']
+        cfr = _oc({'note': cpf.get('note') if isinstance(cpf, dict) else cpf})['reason'] or cfr     # a bare reason string is a note
     if not cfr and nop:
         cands = [r for r in (nop.get('reasons') or []) if 'error' in _s(r).lower() or 'service' in _s(r).lower() or 'fail' in _s(r).lower()]
         cfr = cands[0] if cands else (nop.get('reasons') or [None])[-1]

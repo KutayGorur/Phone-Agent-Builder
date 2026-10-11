@@ -48,6 +48,26 @@ class Facts(unittest.TestCase):
         self.assertEqual(ids, ['bands', 'holidays', 'identity_fields', 'queues'])
 
 
+class Unrepaired(unittest.TestCase):
+    """The second parse has no repair pass: odd shapes must not blind the comparison."""
+
+    def test_bare_string_create_promise_failure_compiles(self):
+        b = base()
+        b['multi_product']['create_promise_failure'] = 'service_error'
+        self.assertEqual(cs.disagreements(base(), b), [])
+        self.assertIn('persuasion', cs.critical_facts(b))
+
+    def test_a_spec_the_full_compile_rejects_still_compares_the_rest(self):
+        b = base()
+        b['confirmation'] = 'read it back'     # the full compile raises on this
+        b['calendar']['holidays'] = ['2026-11-20']
+        facts = cs.critical_facts(b)
+        self.assertNotIn('persuasion', facts)   # only readable through the full compile
+        self.assertEqual(facts['holidays'], ['2026-11-20'])
+        ids = [d['id'] for d in cs.disagreements(base(), b)]
+        self.assertIn('holidays', ids)
+
+
 class Resolve(unittest.TestCase):
     def test_holidays_union_and_days_intersection(self):
         a, b = base(), base()
