@@ -3,7 +3,8 @@
 Backends, tried in this order (standard library only, nothing to install); a backend that fails hands the call to the next:
   1. Anthropic Messages API over HTTPS when ANTHROPIC_API_KEY is set.
   2. The `claude` CLI in print mode (uses the machine's Claude login), tools disabled.
-Every call is logged with `trace.model_call(model, purpose)`.
+If every backend fails on the requested model, the call is tried once more on FALLBACK_MODEL (a refused or
+rate-limited model must not cost the whole build). Every call is logged with `trace.model_call(model, purpose)`.
 """
 import json
 import os
@@ -20,6 +21,7 @@ except ImportError:  # standalone use
     trace = None
 
 DEFAULT_MODEL = os.environ.get("PARSER_MODEL", "claude-opus-5-5")
+FALLBACK_MODEL = os.environ.get("PARSER_FALLBACK_MODEL", "claude-sonnet-5-5")   # empty string: no fallback model
 API_URL = "https://api.anthropic.com/v1/messages"
 
 
@@ -89,15 +91,20 @@ def complete(purpose, system, prompt, model=None, max_tokens=24000, timeout=420)
     order = (["api"] if os.environ.get("ANTHROPIC_API_KEY") else []) + (["cli"] if (shutil.which("claude") or shutil.which("claude.cmd")) else [])
     order = order or ["cli"]                       # nothing available: the CLI call raises the clear "cannot call a model" error
     text, err = None, None
-    for backend in order:                          # a failing backend (bad key, usage limit) falls back to the other one
-        _log(model, purpose, backend=backend, prompt_chars=len(prompt))
-        try:
-            text = _call_api(model, system, prompt, max_tokens, timeout) if backend == "api" else _call_cli(model, system, prompt, timeout)
+    for m in [model] + ([FALLBACK_MODEL] if FALLBACK_MODEL and FALLBACK_MODEL != model else []):
+        if m != model and trace is not None:
+            trace.note(f"model {model} failed on every backend; retrying on fallback model {m}")
+        for backend in order:                      # a failing backend (bad key, usage limit) falls back to the other one
+            _log(m, purpose, backend=backend, prompt_chars=len(prompt))
+            try:
+                text = _call_api(m, system, prompt, max_tokens, timeout) if backend == "api" else _call_cli(m, system, prompt, timeout)
+                break
+            except Exception as e:  # noqa: BLE001
+                err = e
+                if trace is not None:
+                    trace.note(f"model call failed on backend {backend}: {str(e)[:300]}")
+        if text is not None:
             break
-        except Exception as e:  # noqa: BLE001
-            err = e
-            if trace is not None:
-                trace.note(f"model call failed on backend {backend}: {str(e)[:300]}")
     if text is None:
         raise err
     if trace is not None:
