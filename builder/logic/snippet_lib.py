@@ -115,9 +115,39 @@ def band_for(days_late, cfg):
 
 
 def deadline_for(today, band, cfg):
-    if band is None or band.get('deadline_bd') is None:
+    """Last allowed promise date of a band: N business days after today, or N calendar days after today moved to a business
+    day (back by default: a deadline never grows; forward when the spec says so)."""
+    if band is None:
         return None
-    return add_bd(today, band['deadline_bd'], cfg)
+    if band.get('deadline_bd') is not None:
+        return add_bd(today, band['deadline_bd'], cfg)
+    cd = band.get('deadline_cd')
+    if cd is None:
+        return None
+    d = today + datetime.timedelta(days=int(cd))
+    step = 1 if band.get('deadline_roll') == 'forward' else -1
+    for _ in range(_SCAN_LIMIT):
+        if is_bd(d, cfg) or (step < 0 and d <= today):
+            break
+        d = d + datetime.timedelta(days=step)
+    return d
+
+
+def deadline_bd_count(today, band, cfg):
+    """Business days from today (exclusive) to the band's deadline (inclusive); the band's own number when it is given in business days."""
+    if band is None:
+        return 0
+    if band.get('deadline_bd') is not None:
+        return int(band['deadline_bd'])
+    d = deadline_for(today, band, cfg)
+    if d is None:
+        return 0
+    n, cur = 0, today
+    while cur < d:
+        cur = cur + datetime.timedelta(days=1)
+        if is_bd(cur, cfg):
+            n += 1
+    return n
 
 
 def week_start(d, cfg):

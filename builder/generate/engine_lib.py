@@ -742,7 +742,7 @@ def attempt_date(p, e, today):
         n = e.get('bd')
         if n is None:
             band = band_for(p['dl'], CAL)
-            n = -(-int((band or {}).get('deadline_bd') or 0) // 2)
+            n = -(-deadline_bd_count(today, band, CAL) // 2)
         d = add_bd(today, int(n), CAL) if n else None
     else:                                          # week_end, unknown
         d = persuasion_date(today, CAL)

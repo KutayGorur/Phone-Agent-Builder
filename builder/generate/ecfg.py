@@ -407,6 +407,9 @@ def _day_phrase(cb_days):
 def _build(spec, warns_out):
     cal = config_from_spec(spec)
     cal['cb_days'] = canon_cb_days(cal.get('cb_days'), cal.get('warnings'))
+    for b_ in cal.get('bands') or []:
+        if b_.get('deadline_bd') is None and b_.get('deadline_cd') is None:
+            cal.setdefault('warnings', []).append('band %s has no deadline the compiler can read (business_days_after_today or calendar_days_after_today): promise dates are not capped' % b_.get('name'))
     meta = spec.get('meta') or {}
     mp = spec.get('multi_product')
     opening = spec.get('opening') or {}
@@ -633,7 +636,7 @@ def _ack_scope(conf, warns):
 
 # Warnings that mean the compiler substituted a guess for a mandatory meaning (as opposed to a field it ignores or a
 # harmless fallback). The build labels such a spec degraded.
-BLOCKING_MARKS = ('has no amount field', 'is not a known rule: today or', 'could not be read: the floor',
+BLOCKING_MARKS = ('has no amount field', 'has no deadline the compiler can read', 'is not a known rule: today or', 'could not be read: the floor',
                   ' dropped: ',   # a malformed spec section the compiler had to drop (a coerced one is only a warning)
                   'is not a known date rule', 'could be the promise outcome', 'no outcome without reasons',
                   'is mapped to two roles', 'taken from the text of "when"')

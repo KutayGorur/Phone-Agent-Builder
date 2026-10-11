@@ -324,7 +324,11 @@ def _check_calendar_bands(spec, units, tools, errors, warnings, shaky):
             continue
         spans.append((lo, hi if hi is not None else 10 ** 9, b.get("name")))
         if not isinstance(b.get("deadline"), dict) or not b["deadline"]:
-            errors.append(f"band '{b.get('name')}' needs a structured deadline object, e.g. {{\"business_days_after_today\": N}}")
+            errors.append(f"band '{b.get('name')}' needs a structured deadline object, e.g. {{\"business_days_after_today\": N}} or {{\"calendar_days_after_today\": N, \"if_non_business_day\": \"back\"}}")
+        else:
+            from builder.logic.config import read_deadline
+            if read_deadline(b["deadline"])[:2] == (None, None):
+                errors.append(f"band '{b.get('name')}' deadline has no readable number: give business_days_after_today or calendar_days_after_today (found keys {sorted(b['deadline'])})")
         if not isinstance(b.get("persuasion_attempts"), int):
             warnings.append(f"band '{b.get('name')}' has no integer persuasion_attempts")
     spans.sort()

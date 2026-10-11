@@ -18,6 +18,35 @@ def _hhmm(s):
     return int(m.group(1)) * 60 + int(m.group(2)) if m else None
 
 
+def _num(v):
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)) and v >= 0:
+        return int(v)
+    if isinstance(v, str) and v.strip().isdigit():
+        return int(v.strip())
+    return None
+
+
+def read_deadline(dl):
+    """A band deadline object -> (business days after today, calendar days after today, roll). Business days win when both
+    are given. Calendar-day deadlines that land on a closed day roll back (default) or forward, as the spec says."""
+    if isinstance(dl, (int, float)) and not isinstance(dl, bool):
+        return _num(dl), None, None
+    if not isinstance(dl, dict):
+        return None, None, None
+    bd = next((_num(dl[k]) for k in ('business_days_after_today', 'working_days_after_today', 'business_days', 'working_days') if _num(dl.get(k)) is not None), None)
+    cd = next((_num(dl[k]) for k in ('calendar_days_after_today', 'calendar_days', 'days_after_today', 'days') if _num(dl.get(k)) is not None), None)
+    roll = None
+    for k in ('if_non_business_day', 'if_non_working_day', 'non_business_day', 'on_non_business_day', 'roll', 'rolled', 'roll_direction', 'if_closed'):
+        v = dl.get(k)
+        if isinstance(v, str):
+            t = v.lower()
+            roll = 'forward' if re.search(r'forward|next|after|later|following', t) and not re.search(r'back|before|previous|earlier|prior', t) else 'back'
+            break
+    return bd, (None if bd is not None else cd), (roll or 'back')
+
+
 def config_from_spec(spec):
     spec = spec or {}
     warnings = []
@@ -36,11 +65,14 @@ def config_from_spec(spec):
     bands = []
     for b in spec.get('bands') or []:
         dl = b.get('deadline') or {}
+        bd, cd, roll = read_deadline(dl)
         bands.append({
             'name': b.get('name'),
             'min': b.get('days_late_min'),
             'max': b.get('days_late_max'),
-            'deadline_bd': dl.get('business_days_after_today'),
+            'deadline_bd': bd,
+            'deadline_cd': cd,
+            'deadline_roll': roll,
             'attempts': b.get('persuasion_attempts'),
         })
     if not bands:
