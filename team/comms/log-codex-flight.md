@@ -266,3 +266,9 @@ Current build at ccf2370 started 18:09 UTC, indexed 18 readable documents includ
 
 19:23 UTC fresh source audit fixed stale per-card balance/linked-week values and numeric statementDay request typing, with all 15 semantic vectors passing. Freya dry run then rejected loop_prompt in ten ordinary/global conversation nodes, despite the supplied technical guide documenting that field. Added a generic compatibility transformation preserving both entry and retry instructions in task_message, selected by the documented node.current_turns variable; removes only the rejected field. Source audit sees the transformed candidate, and final schema gate remains mandatory. Added prompt-preservation/immutability regression. No workflow has been created or simulated yet.
 
+
+## 2026-10-11 19:28 UTC — final workflow published; paid smoke started
+
+Final folder build at ffbe9b3442bdfbd71cd8913612ade690369d3c48 completed successfully in 67 seconds, with exactly matched recorded classification/requirements/compiler responses and a fresh complete-source audit. The audit corrected silence and calming-reply boundaries and added regression vectors; all 18 vectors passed. Freya schema accepted the generic loop-prompt compatibility transform, and workflow 4a066e2a-10c5-4f86-aac1-5308f1191e8a was published with the event model and exported to out/finalfolder.workflow.json. Successful trace: traces/finalfolder-20261011-222458.trace.txt; complete model session beside it. No manual workflow edits.
+
+Shared sim slot claimed after confirming prior simulations terminal. EX-01 is running via ci/sim.py --why; the remaining five supplied examples follow if the smoke establishes live execution. No final platform score yet. Team Throw member metadata is now provided. Persistent mock remains deployed; no workflows deleted.
