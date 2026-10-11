@@ -28,5 +28,6 @@ Merge order for generator work: 06 -> 07 -> (01/02/03/04 fixes, small PRs). Anyo
 
 | 18 primary developer: test and fix verification interruptions | team/comms/log-codex-flight.md | yes (targeted first) | generator if reproduced | none | codex-flight | done (reporting fixes ae88bc2/df6e6f0; PUB-04/07/08/09 targeted 4/4; latency/stall confidence limit remains) | 2026-10-11 | main | local gates green; sim slot released |
 
-| 19 complete public platform check on current candidates | team/comms/log-codex-flight.md | yes (A full then combined full) | no | 18 | codex-flight | in-progress | 2026-10-11 | main | A v11 full 0/10 (pre-extraction stalls); combined v6 full running; no readiness sign-off |
+| 19 complete public platform check on current candidates | team/comms/log-codex-flight.md | yes (A full then combined full) | no | 18 | codex-flight | done (all cases attempted; live readiness blocked) | 2026-10-11 | main | A v11 0/10; combined v6 0/13; all opening-only stalls; sim slot free |
+
 
