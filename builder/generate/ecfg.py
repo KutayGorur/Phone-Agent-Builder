@@ -404,6 +404,45 @@ def _day_phrase(cb_days):
     return {'today': 'today', 'next_business_day': 'the next business day', 'any_business_day': 'any business day'}.get(_s(cb_days), 'today or the next business day')
 
 
+CURRENCY_WORDS = {
+    'NOK': ('kroner', 'ore'), 'SEK': ('kronor', 'ore'), 'DKK': ('kroner', 'ore'), 'ISK': ('kronur', None), 'EUR': ('euro', 'cents'),
+    'USD': ('dollars', 'cents'), 'CAD': ('dollars', 'cents'), 'AUD': ('dollars', 'cents'), 'GBP': ('pounds', 'pence'), 'JPY': ('yen', None),
+    'CHF': ('francs', 'rappen'), 'PLN': ('zloty', 'groszy'), 'CZK': ('koruna', None), 'HUF': ('forint', None), 'TRY': ('lira', 'kurus'),
+    'INR': ('rupees', 'paise'), 'CNY': ('yuan', 'fen'), 'KRW': ('won', None), 'NZD': ('dollars', 'cents'), 'ZAR': ('rand', 'cents'),
+}
+
+
+def money_format(spec):
+    """How amounts are SPOKEN, from the spec (meta/amounts/debt_statement keys on currency and spoken format) -> dict or None.
+    None keeps the default (two decimals, no unit). {'major', 'minor', 'sep', 'whole'}: 'major' and 'minor' are the unit words,
+    'sep' the thousands separator ('' for none), 'whole' = only whole units are ever said."""
+    secs = [spec.get(k) or {} for k in ('amounts', 'meta', 'debt_statement')]
+    cur = next((str(d[k]).strip() for d in secs if isinstance(d, dict) for k in ('currency', 'currency_code') if isinstance(d.get(k), str) and d.get(k).strip()), None)
+    texts = [str(d[k]) for d in secs if isinstance(d, dict) for k in d
+             if re.search(r'spoken|speech|amount_format|format', str(k), re.I) and not re.search(r'record|wire|date|time', str(k), re.I) and isinstance(d[k], (str, list))]
+    flat = ' '.join(t for t in texts)
+    whole = any(d.get(k) is True for d in secs if isinstance(d, dict) for k in d if re.search(r'whole.*only|only.*whole|no_decimals', str(k), re.I)) or \
+        bool(re.search(r'whole|no decimals|never say', flat, re.I))
+    if not cur and not flat.strip():
+        return None
+    major, minor = CURRENCY_WORDS.get((cur or '').upper(), (None, None))
+    m = re.search(r'\d[\d\s.,\u00a0]*\s+([A-Za-z\u00f8\u00e6\u00e5]+)(?:\s+and\s+\d+\s+([A-Za-z\u00f8\u00e6\u00e5]+))?', flat)
+    if m:
+        major = m.group(1) or major
+        minor = m.group(2) or minor
+    sep = ''                                  # no example with a separator in the spec: say the number plainly
+    ms = re.search(r'\d{1,3}([ ,.\u00a0\u202f])\d{3}\b', flat)
+    if ms:
+        sep = ' ' if ms.group(1) in ('\u00a0', '\u202f') else ms.group(1)
+    if not major:
+        major = (cur or '').lower() or None
+    if not major:
+        return None
+    if minor is None:
+        whole = True
+    return {'major': major, 'minor': minor, 'sep': sep, 'whole': bool(whole)}
+
+
 def _build(spec, warns_out):
     cal = config_from_spec(spec)
     cal['cb_days'] = canon_cb_days(cal.get('cb_days'), cal.get('warnings'))
@@ -574,7 +613,7 @@ def _build(spec, warns_out):
     b0 = (spec.get('bands') or [{}])[0]
     f_days = b0.get('days_late_field') or (inc[1] if len(inc) > 1 else 'days_late')
     pd_by_type, days_by_type = amount_fields(spec, items, f_pd, f_days, floor_field, warns)
-    pd_word = 'past due' if 'past' in f_pd else 'overdue'
+    pd_word = 'past due' if 'past' in f_pd else ('outstanding' if 'outstanding' in f_pd else 'overdue')
     days_word = 'late' if 'late' in f_days else ('past due' if 'past' in f_days else 'overdue')
     first_q = pers.get('first_question') or 'Can you make this payment today?'
     say = ds.get('say') or 'calling about a late payment'
@@ -584,7 +623,7 @@ def _build(spec, warns_out):
     mwho = re.search(r'with (.+?)\?', cq)
     who = (mwho.group(1) if mwho else '{title} {last_name}').replace('{', '{{').replace('}', '}}')
     E = {
-        'cal': cal, 'acct_node': 'get_account', 'f_pd': f_pd, 'f_days': f_days, 'pd_by_type': pd_by_type, 'days_by_type': days_by_type, 'pd_word': pd_word, 'days_word': days_word,
+        'cal': cal, 'acct_node': 'get_account', 'money': money_format(spec), 'f_pd': f_pd, 'f_days': f_days, 'pd_by_type': pd_by_type, 'days_by_type': days_by_type, 'pd_word': pd_word, 'days_word': days_word,
         'who': who, 'formula': formula, 'pn': ds.get('product_names') or {}, 'floor_field': floor_field,
         'floor_word': floor_word, 'first_q': first_q, 'first_q_all': 'Can you pay all of these today?',
         'confirm_q': conf.get('confirm_question') or 'Do you confirm?',

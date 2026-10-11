@@ -32,6 +32,29 @@ def money(x):
     return '%.2f' % float(x)
 
 
+def plain_label(label):
+    """'a revolving card' -> 'revolving card' for sentences that open with 'Your'."""
+    return re.sub(r'^(a|an|the|your)\s+', '', str(label), flags=re.I)
+
+
+def say_money(x):
+    """An amount as it is spoken: the spec's currency words and thousands separator when it gives them ("1 250 kroner and 50
+    ore"), else two decimals. The tool body keeps money()."""
+    f = E.get('money')
+    if not f:
+        return money(x)
+    cents = int(round(float(x) * 100))
+    major, minor = divmod(cents, 100)
+    if f.get('whole') and minor:
+        major, minor = int(float(x) + 0.999999), 0           # whole units only: a spoken amount is never lower than the real one
+    sep = f.get('sep') or ''
+    txt = '{:,}'.format(major).replace(',', sep) if sep else str(major)
+    out = '%s %s' % (txt, f['major'])
+    if minor and f.get('minor') and not f.get('whole'):
+        out += ' and %d %s' % (minor, f['minor'])
+    return out
+
+
 def today_d():
     d, mins = parse_now(S('now'))
     if d is None:
@@ -526,9 +549,9 @@ def multi(st):
 def facts(st, hide_floor=False):
     lines = []
     for p in st['prods']:
-        s = '%s: %s %s, %d days %s' % (p['label'], money(p['pd']), E['pd_word'], p['dl'], E['days_word'])
+        s = '%s: %s %s, %d days %s' % (p['label'], say_money(p['pd']), E['pd_word'], p['dl'], E['days_word'])
         if p['fl'] and p['fl'] < p['pd'] and not hide_floor:
-            s += ', %s %s' % (floor_word(p), money(p['fl']))
+            s += ', %s %s' % (floor_word(p), say_money(p['fl']))
         if p['dead']:
             s += ', latest promise date %s' % dstr(from_iso(p['dead']))
         lines.append(s)
@@ -545,8 +568,8 @@ def offer_q(st, p):
     if k == 'today':
         return E['first_q']
     if k == 'day':
-        return 'On which day can you pay %s?' % money(pe['a'])
-    amt = money(pe['a'])
+        return 'On which day can you pay %s?' % say_money(pe['a'])
+    amt = say_money(pe['a'])
     q = 'Can you pay %s on %s?' % (amt, dstr(from_iso(pe['d'])))
     if pe['a'] + 0.004 < p['pd']:
         q += ' The rest would stay overdue.'
@@ -558,7 +581,7 @@ def readback(st):
     for p in st['prods']:
         if p['status'] != 'agreed':
             continue
-        s = '%s, %s on %s' % (p['label'], money(p['amt']), dstr(from_iso(p['date'])))
+        s = '%s, %s on %s' % (p['label'], say_money(p['amt']), dstr(from_iso(p['date'])))
         if p['cap']:
             s += ' (the latest date I can record for this one)'
         items.append(s)
@@ -623,7 +646,7 @@ def final(st, lead=''):
     rec = [p for p in prods if p['status'] == 'recorded']
     bad = [p for p in prods if p['status'] in ('noted', 'failed')]
     if rec:
-        items = ['%s, %s on %s' % (p['label'], money(p['amt']), dstr(from_iso(p['date']))) for p in rec]
+        items = ['%s, %s on %s' % (p['label'], say_money(p['amt']), dstr(from_iso(p['date']))) for p in rec]
         txt = 'Your promise is recorded: ' + '; '.join(items) + '.'
         if not all(p.get('ack') for p in rec):      # a record already acknowledged one by one is not announced again
             txt += ' ' + E['after_recorded']
@@ -707,7 +730,7 @@ def advance(st, lead=''):
         return finish_nego(st, lead)
     st['cur'] = nxt['i']
     st['all'] = False
-    intro = 'Now your %s.' % nxt['label'] if multi(st) else ''
+    intro = 'Now your %s.' % plain_label(nxt['label']) if multi(st) else ''
     return refusal(st, nxt, ((lead + ' ') if lead else '') + intro, start=True)
 
 
@@ -862,12 +885,12 @@ def offer(st, p, dt, am, lead=''):
             p['pend'] = {'a': use_amt, 'd': None, 'k': 'day'}
             core = ''
             if below:
-                core = 'I cannot record less than the %s of %s; the rest would stay overdue. ' % (floor_word(p), money(p['fl']))
-            return speak(pre + core + 'On which day can you pay %s?' % money(use_amt))
+                core = 'I cannot record less than the %s of %s; the rest would stay overdue. ' % (floor_word(p), say_money(p['fl']))
+            return speak(pre + core + 'On which day can you pay %s?' % say_money(use_amt))
         return reask(st, lead)
     pieces = []
     if below:
-        pieces.append('I cannot record less than the %s of %s.' % (floor_word(p), money(p['fl'])))
+        pieces.append('I cannot record less than the %s of %s.' % (floor_word(p), say_money(p['fl'])))
     if flag == 'late':
         pieces.append('The latest date I can record is %s.' % dstr(d))
     elif flag == 'moved':
@@ -1199,7 +1222,7 @@ def turn_all(st, it, dt, am, pref):
         st['cur'] = 0
         p0 = prods[0]
         intro = "Let's go through them one by one."
-        return refusal(st, p0, intro + ' Your %s.' % p0['label'])
+        return refusal(st, p0, intro + ' Your %s.' % plain_label(p0['label']))
     if it in ('offer', 'change'):
         kind, named = target_products(st, pref)
         opened = [q for q in prods if q['status'] == 'open']
@@ -1359,7 +1382,7 @@ def plan(st):
     st['prods'] = prods
     st['phase'] = 'nego'
     n = len(prods)
-    sents = ['Your %s is %s %s and %d days %s.' % (p['label'], money(p['pd']), E['pd_word'], p['dl'], E['days_word']) for p in prods]
+    sents = ['Your %s is %s %s and %d days %s.' % (plain_label(p['label']), say_money(p['pd']), E['pd_word'], p['dl'], E['days_word']) for p in prods]
     say = E['debt_say']
     if n > 1:
         say = say.replace('a late payment', 'late payments').replace('an overdue payment', 'overdue payments')
