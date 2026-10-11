@@ -345,7 +345,13 @@ def main(argv=None):
     ap.add_argument("--dry-run", action="store_true", help="parse + generate only; no Freya calls, no credits; writes out/<stem>.workflow.json")
     ap.add_argument("--run-cases-cmd", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--parse-target", default="builder.parse:parse", help=argparse.SUPPRESS)
+    ap.add_argument("--mock-url", default=os.environ.get("BANK_MOCK_URL"), help="deployment origin for a document-folder build")
     a = ap.parse_args(argv)
+    if len(a.files) == 1 and pathlib.Path(a.files[0]).is_dir():
+        if a.selftest or a.spec_file:
+            ap.error("folder builds do not support practice selftests or manually supplied specs")
+        from builder.folder_build import build_folder
+        return build_folder(a)
     if len(a.files) < 2:
         ap.error("need at least one brief and the tool API file")
     briefs, tool_api = a.files[:-1], a.files[-1]
