@@ -5,6 +5,7 @@ This path learns document roles, authority, requirements and API fields from
 the input pack. It never imports the practice business rules.
 """
 import ast
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,29 @@ from ci.lint_workflow import lint
 ROOT = Path(__file__).resolve().parent.parent
 ROLES = {'policy', 'integration', 'scenario', 'fixture', 'operations'}
 SAFE_MODULES = {'json', 're', 'datetime', 'decimal', 'math', 'calendar', 'unicodedata'}
+
+
+def source_answer_cache(trace_dir, purpose, instructions, prompt, current_session):
+    """Reuse only exact, recorded source extraction; never a compiled agent."""
+    if purpose not in {'classify document roles', 'derive source requirements'}:
+        return None
+    paths = sorted(Path(trace_dir).glob('*.model.jsonl'), key=lambda p:p.stat().st_mtime, reverse=True)
+    for path in paths:
+        if path == current_session:
+            continue
+        matched = False
+        try:
+            for line in path.read_text(encoding='utf-8').splitlines():
+                item = json.loads(line)
+                if item.get('type') == 'request':
+                    matched = item.get('purpose') == purpose and item.get('instructions') == instructions and item.get('prompt') == prompt
+                elif matched and item.get('type') == 'response' and item.get('purpose') == purpose:
+                    answer = item['text']
+                    extract_json(answer)
+                    return {'text':answer,'reused_from':str(path),'answer_sha256':hashlib.sha256(answer.encode('utf-8')).hexdigest()}
+        except (ValueError, KeyError, OSError):
+            continue
+    return None
 
 
 def code_problems(code):
@@ -236,9 +260,15 @@ def build_folder(args):
         prompt = json.dumps(payload, ensure_ascii=False)
         with session.open('a', encoding='utf-8') as log:
             log.write(trace.redact(json.dumps({'type':'request', 'purpose':purpose, 'instructions':instructions, 'prompt':prompt}, ensure_ascii=False)) + '\n')
-        answer = complete(purpose, instructions, prompt, timeout=min(540, left-20), max_tokens=32000)
+        reused = source_answer_cache(trace_dir, purpose, instructions, prompt, session)
+        if reused:
+            answer = reused['text']
+            t.note('reusing exact recorded source extraction: ' + reused['reused_from'])
+        else:
+            call_limit = 900 if purpose in {'compile document workflow','repair workflow contract'} else 540
+            answer = complete(purpose, instructions, prompt, timeout=min(call_limit, left-20), max_tokens=32000)
         with session.open('a', encoding='utf-8') as log:
-            log.write(trace.redact(json.dumps({'type':'response', 'purpose':purpose, 'text':answer}, ensure_ascii=False)) + '\n')
+            log.write(trace.redact(json.dumps({'type':'response', 'purpose':purpose, 'text':answer, **({k:v for k,v in reused.items() if k!='text'} if reused else {})}, ensure_ascii=False)) + '\n')
         return extract_json(answer)
 
     try:
