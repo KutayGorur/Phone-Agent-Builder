@@ -451,7 +451,7 @@ def main(argv=None):
             if a.selftest:
                 t.selftest(f"dry run: would run run_cases on {','.join(pick_cases(a.selftest_cases, a.selftest_brief, a.selftest_max))}")
             status = status if status == "degraded" else "ok"
-            return 0 if out_path else 1
+            return 2 if status == "degraded" else (0 if out_path else 1)
         import freya
         t.stage("freya save")
         try:
@@ -503,7 +503,9 @@ def main(argv=None):
     finally:
         wd.cancel()
         t.end(status, workflow_id=workflow_id, output=out_path)
-    return 0 if status in ("ok", "degraded") and out_path else 1
+    # Keep a degraded export for diagnosis/submission fallback, but never report
+    # it as a successful build to scripts or the judges' runner.
+    return 2 if status == "degraded" and out_path else (0 if status == "ok" and out_path else 1)
 
 
 if __name__ == "__main__":

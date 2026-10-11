@@ -191,6 +191,7 @@ def parse(brief_paths, tool_api_path):
     unit_ids = [u["id"] for u in all_units]
     _note(f"{len(all_units)} units from {len(sources)} file(s); tool API has {len(tools)} tools")
     models_used = set()
+    model_failures = []
 
     try:
         system = _system_prompt()
@@ -226,6 +227,7 @@ def parse(brief_paths, tool_api_path):
                     _note(f"audit found {len(issues)} issues")
                 except Exception as e:  # noqa: BLE001
                     _note(f"audit skipped: {str(e)[:200]}")
+                    model_failures.append(f"audit model call failed: {str(e)[:200]}")
             problems = [f"[validation error] {e}" for e in errors] + [f"[automatic warning] {w}" for w in warnings[:25]] + \
                        [f"[audit {i.get('type')}] unit {i.get('unit')}: {i.get('detail')} -> {i.get('fix')}" for i in issues]
             if not errors and not issues:
@@ -243,6 +245,7 @@ def parse(brief_paths, tool_api_path):
                 _debug(f"spec.after_repair{rnd}.json", spec)
             except Exception as e:  # noqa: BLE001
                 _note(f"repair failed: {str(e)[:200]}")
+                model_failures.append(f"repair model call failed: {str(e)[:200]}")
                 break
 
         errors, warnings = validate_mod.validate(spec, all_units, tools)
@@ -264,8 +267,10 @@ def parse(brief_paths, tool_api_path):
     questions = spec.pop("_open_questions", [])
     spec["tools_server"] = tools_block["server"]
     spec["tools"] = tools
-    spec["parser"] = {"degraded": False, "briefs": sources, "models": sorted(models_used),
+    spec["parser"] = {"degraded": bool(model_failures), "briefs": sources, "models": sorted(models_used),
                       "seconds": round(time.time() - t0), "unresolved_errors": errors, "warnings": warnings, "open_questions": questions}
+    if model_failures:
+        spec["parser"]["reason"] = "; ".join(model_failures)
     order = [k for k in spec if k not in ("tools_server", "tools", "extra_rules", "rule_coverage", "parser")] + ["tools_server", "tools", "extra_rules", "rule_coverage", "parser"]
     return {k: spec[k] for k in order}
 

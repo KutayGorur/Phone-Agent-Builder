@@ -35,13 +35,14 @@ df -h .                            # free disk
 
 ## 4. Build (per brief)
 ```bash
+set -o pipefail                    # preserve a failed builder exit through tee
 source env.sh && mkdir -p traces
 python3 builder/build.py ~/final/<brief> ~/final/<tool_api> 2>&1 | tee traces/<brief>.log
 ```
 - Wall time target under 27 min; typically under a minute for parse+generate+save (fresh clone, Brief A: 44 s).
 - Add `--selftest` only if credits allow; it is a smoke test on the practice customers (A/B cases), not meaningful for unseen briefs. Default is off.
 - Check after each run:
-  - last trace line `[END] status=ok` (not `degraded`, not stub). `status=degraded` means the workflow fell back to `examples/base-agent.json`.
+  - last trace line `[END] status=ok` (not `degraded`, not stub). A degraded build exits 2 even when an export is kept. It means the spec is untrusted or generation/validation fell back; it does not always mean the base agent was used. Exhausted audit/repair model retries also mark the spec degraded.
   - `out/<stem>.workflow.json` exists and `out/<stem>.spec.json` was written.
   - the trace lists start/end time, every model call, the Freya resources, no keys: `grep -n "fak_\|FREYA_BANK_TEAM_KEY" traces/*.trace.txt` must be empty.
   - the "audit" model call did not fail (a skipped audit is silent).
