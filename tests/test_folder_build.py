@@ -1,8 +1,21 @@
 import unittest
-from builder.folder_build import choose_documents, origin, validate_plan, workflow_problems
+from builder.folder_build import choose_documents, origin, validate_plan, workflow_problems, code_problems, run_vectors
 
 
 class FolderCompilerTests(unittest.TestCase):
+    def test_generated_semantics_are_executed_and_wrong_answer_fails(self):
+        tool={'type':'function','function':{'handler':'__function__:code_exec','parameters':{'properties':{'code':{'default':"vars['result'] = max(0, vars['amount'] - vars['paid'])"}}}}}
+        result={'workflow':{'nodes':{'compute':{'pre_actions':[tool]}}},'tests':[{'name':'credit is not debt','node':'compute','vars':{'amount':10,'paid':15},'expect_vars':{'result':0}}]}
+        self.assertIn('PASS 1',run_vectors(result))
+        result['tests'][0]['expect_vars']['result']=5
+        with self.assertRaises(ValueError):
+            run_vectors(result)
+
+    def test_unsupported_generated_code_is_rejected_without_execution(self):
+        self.assertTrue(code_problems("import os\nvars['result']=os.environ"))
+        self.assertTrue(code_problems("vars['result']=open('credentials').read()"))
+        self.assertEqual(code_problems("import decimal\nvars['result']=str(decimal.Decimal('1.20'))"),[])
+
     def test_origin_rejects_credentials_and_non_origin_urls(self):
         self.assertEqual(origin('https://bank.example/'), 'https://bank.example')
         for value in ('http://bank.example', 'https://user:secret@bank.example', 'https://bank.example/path', 'https://bank.example?token=secret'):

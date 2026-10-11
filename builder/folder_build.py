@@ -10,6 +10,8 @@ import os
 from pathlib import Path
 import threading
 import time
+import subprocess
+import sys
 from urllib.parse import urlsplit, urlunsplit
 
 from builder import trace
@@ -19,6 +21,62 @@ from ci.lint_workflow import lint
 
 ROOT = Path(__file__).resolve().parent.parent
 ROLES = {'policy', 'integration', 'scenario', 'fixture', 'operations'}
+SAFE_MODULES = {'json', 're', 'datetime', 'decimal', 'math', 'calendar', 'unicodedata'}
+
+
+def code_problems(code):
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as exc:
+        return ['invalid Python: ' + str(exc)]
+    problems = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [a.name.split('.')[0] for a in node.names] if isinstance(node, ast.Import) else [(node.module or '').split('.')[0]]
+            if any(name not in SAFE_MODULES for name in names):
+                problems.append('snippet imports a module outside the supported sandbox')
+        if isinstance(node, ast.Attribute) and node.attr.startswith('__'):
+            problems.append('snippet uses unsupported interpreter introspection')
+        if isinstance(node, ast.Name) and node.id in {'open','exec','eval','compile','__import__','__builtins__','globals','getattr','setattr'}:
+            problems.append('snippet uses unsupported process/file/interpreter operation')
+    return problems
+
+
+def run_vectors(result):
+    tests = result.get('tests') or []
+    if not tests:
+        raise ValueError('compiler supplied no executable semantic test vectors')
+    jobs = []
+    nodes = result['workflow']['nodes']
+    for test in tests:
+        node = nodes.get(test.get('node')) or {}
+        snippets = [t['function']['parameters']['properties']['code']['default']
+                    for t in functions(node.get('pre_actions') or [])
+                    if t['function'].get('handler') == '__function__:code_exec']
+        if not snippets or not isinstance(test.get('expect_vars'), dict) or not test['expect_vars']:
+            raise ValueError('semantic test needs a real code node and nonempty expectations: ' + str(test.get('name')))
+        jobs.append({'name':test.get('name'),'code':snippets,'vars':test.get('vars',{}),'expect':test['expect_vars']})
+    runner = '''
+import builtins,json,sys
+jobs=json.load(sys.stdin)
+allowed={k:getattr(builtins,k) for k in ('abs','all','any','bool','dict','enumerate','Exception','float','int','isinstance','KeyError','len','list','map','max','min','next','range','repr','round','set','sorted','str','sum','tuple','TypeError','ValueError','zip','format')}
+modules={'json','re','datetime','decimal','math','calendar','unicodedata'}
+def importer(name,*args,**kwargs):
+    if name.split('.')[0] not in modules: raise ImportError(name)
+    return builtins.__import__(name,*args,**kwargs)
+allowed['__import__']=importer
+for job in jobs:
+    scope={'__builtins__':allowed,'vars':job['vars']}
+    for code in job['code']: exec(compile(code,job['name'],'exec'),scope)
+    for key,value in job['expect'].items():
+        if scope['vars'].get(key)!=value: raise AssertionError(job['name']+': '+key+' expected '+repr(value)+' got '+repr(scope['vars'].get(key)))
+print('PASS '+str(len(jobs))+' generated semantic test vectors')
+'''
+    env = {key:value for key,value in os.environ.items() if key.upper() in {'PATH','SYSTEMROOT','WINDIR','TEMP','TMP','PYTHONUTF8'}}
+    tested = subprocess.run([sys.executable,'-I','-c',runner],input=json.dumps(jobs),capture_output=True,text=True,encoding='utf-8',env=env,timeout=20)
+    if tested.returncode:
+        raise ValueError('semantic code tests failed: ' + tested.stderr[-3500:])
+    return tested.stdout.strip()
 
 
 def origin(value):
@@ -101,14 +159,14 @@ def workflow_problems(workflow, plan, mock_url):
                 errors.append('code must be static Python without template braces: ' + str(f.get('name')))
             else:
                 try:
-                    ast.parse(code)
+                    errors += code_problems(code)
                 except SyntaxError as exc:
                     errors.append('invalid Python: ' + str(exc))
         for hook in ('pre_process_code', 'post_process_code'):
             code = tool.get(hook) or f.get(hook)
             if isinstance(code, str):
                 try:
-                    ast.parse(code)
+                    errors += code_problems(code)
                 except SyntaxError as exc:
                     errors.append('invalid hook Python: ' + str(exc))
     for path in api.keys() - seen:
@@ -163,7 +221,8 @@ def build_folder(args):
     watchdog = threading.Timer(min(args.budget_min * 60 + 45, 1785), timeout)
     watchdog.daemon = True
     watchdog.start()
-    t.start(folder=str(folder), mock_url=mock_url, budget_s=int(deadline-time.monotonic()))
+    revision = subprocess.run(['git','rev-parse','HEAD'],cwd=ROOT,capture_output=True,text=True).stdout.strip()
+    t.start(folder=str(folder), mock_url=mock_url, build_commit=revision, budget_s=int(deadline-time.monotonic()))
 
     def ask(purpose, instructions, payload):
         left = deadline - time.monotonic()
@@ -189,7 +248,7 @@ def build_folder(args):
         (out / (stem + '.sources.json')).write_text(json.dumps({'manifest':manifest, 'classification':classified, 'unsupported':pack['unsupported']}, ensure_ascii=False, indent=2), encoding='utf-8')
         t.stage('source requirements')
         plan = ask('derive source requirements',
-            'Build a complete domain-neutral machine-readable agent specification from the supplied source documents. Return JSON with authority:[{source,priority,reason}], call_variables:[{name,meaning}], language, requirements:[{id,rule,sources:[exact source paths]}], services:[{name,path,method,required_request_fields:[dot-separated nested fields],request_schema,response_schema,success_check,side_effect}], unresolved:[{issue,safe_behavior}]. Include ALL operational branches, monetary/date formulas, order of announcements, authorization, ambiguity, retry/silence/repeat limits, error paths, linked entity effects, privacy and adversarial inputs. Resolve contradictions using explicit approved amendments and authority/date evidence; file order is never authority. Preserve exact policy wording when mandated. Existing identity verification must not be repeated if inputs say it is already complete. Distinguish example values from normative constants. Never invent fields, APIs, eligibility flags or backend capabilities. Scenarios illustrate behavior but do not override authoritative policy. Missing facts require an honest safe behavior. Requirements must cite source filenames.', selected)
+            'Build a complete domain-neutral machine-readable agent specification from the supplied source documents. Return JSON with authority:[{source,priority,reason}], call_variables:[{name,meaning}], language, requirements:[{id,rule,sources:[exact source paths]}], services:[{name,path,method,required_request_fields:[dot-separated nested fields],request_schema,response_schema,success_check,side_effect}], dependencies:[{purpose,contract,required_in_test_environment}], unresolved:[{issue,safe_behavior}]. The services array contains the business APIs the agent actually calls against the deployed mock. Integration authentication/token acquisition belongs in dependencies when the supplied test environment explicitly bypasses it; do not require a production-only authentication endpoint on that mock, invent credentials or fabricate an access token. Preserve production authentication requirements separately. Include ALL operational branches, monetary/date formulas, order of announcements, authorization, ambiguity, retry/silence/repeat limits, error paths, linked entity effects, privacy and adversarial inputs. Resolve contradictions using explicit approved amendments and authority/date evidence; file order is never authority. Preserve exact policy wording when mandated. Existing identity verification must not be repeated if inputs say it is already complete. Distinguish example values from normative constants. Never invent fields, APIs, eligibility flags or backend capabilities. Scenarios illustrate behavior but do not override authoritative policy. Missing facts require an honest safe behavior. Requirements must cite source filenames.', selected)
         validate_plan(plan, selected)
         (out / (stem + '.spec.json')).write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding='utf-8')
         technical = {name:(ROOT/'docs'/name).read_text(encoding='utf-8') for name in ('workflow-format.md','tools-and-code.md')}
@@ -225,7 +284,11 @@ def build_folder(args):
             for warning in warnings:
                 t.note('lint: ' + warning)
             if not errors:
-                break
+                try:
+                    t.note(run_vectors(result))
+                    break
+                except Exception as exc:
+                    errors.append(str(exc))
             if attempt == 2:
                 raise ValueError('workflow contract failed: ' + ' | '.join(errors))
             t.error('compiler validation: ' + ' | '.join(errors))
@@ -246,6 +309,7 @@ def build_folder(args):
             t.note('source audit applied compiler repair: ' + json.dumps(audit.get('issues'), ensure_ascii=False))
         (out / (stem + '.compiler.json')).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         (out / (stem + '.audit.json')).write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding='utf-8')
+        t.note(run_vectors(result))
         latest = load_pack(folder)
         if manifest != [{'source':d['source'],'sha256':d['sha256']} for d in latest['documents']]:
             raise ValueError('input pack changed during build; rerun against the latest stable sources')
@@ -258,6 +322,8 @@ def build_folder(args):
             t.stage('publish generated workflow')
             saved = save_with_recovery(freya, stem, workflow, STATE_FILE, t)
             workflow_id = saved['workflow_id']
+            if 'version' not in saved:
+                saved['version'] = freya.update_workflow(workflow_id, workflow)
             t.freya('save', workflow_id=workflow_id)
             freya.export_workflow(workflow_id, str(output))
             t.freya('export', workflow_id=workflow_id, path=str(output))

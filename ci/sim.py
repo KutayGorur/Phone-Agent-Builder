@@ -41,6 +41,7 @@ def main():
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--why", default="")
     ap.add_argument("--ledger", action="store_true")
+    ap.add_argument("--runner", choices=("practice", "document"), default="practice", help="document cases use live call variables and transcript checks, without the practice bank")
     a = ap.parse_args(argv)
     if a.ledger:
         show_ledger(); return
@@ -51,16 +52,21 @@ def main():
     if a.reps > 1 and not a.full:
         sys.exit("refusing: --reps > 1 is for milestone runs, add --full")
 
-    lint = subprocess.run([sys.executable, str(ROOT / "ci/lint_workflow.py"), a.workflow, "--dry-run"])
+    lint_cmd = [sys.executable, str(ROOT / "ci/lint_workflow.py"), a.workflow, "--dry-run"]
+    if a.runner == "document": lint_cmd += ["--openapi", ""]
+    lint = subprocess.run(lint_cmd)
     if lint.returncode:
         sys.exit("refusing: workflow lint failed")
 
     cases = [c for c in json.load(open(a.cases, encoding="utf-8"))
              if (not a.brief or c["brief"] == a.brief) and (not a.only or c["id"] in a.only.split(","))]
     calls = len(cases) * a.reps
+    if not cases or a.reps < 1:
+        sys.exit("refusing: no selected cases or invalid repetition count")
     print(f"simulating {len(cases)} case(s) x {a.reps} rep(s) = {calls} calls", flush=True)
 
-    cmd = [sys.executable, str(ROOT / "tools/run_cases.py"), a.agent_id, "--cases", a.cases, "--reps", str(a.reps)]
+    runner = "run_document_cases.py" if a.runner == "document" else "run_cases.py"
+    cmd = [sys.executable, str(ROOT / "tools" / runner), a.agent_id, "--cases", a.cases, "--reps", str(a.reps)]
     if a.brief: cmd += ["--brief", a.brief]
     if a.only: cmd += ["--only", a.only]
     cmd += extra
