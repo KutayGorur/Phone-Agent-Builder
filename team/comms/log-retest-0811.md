@@ -1,0 +1,4 @@
+# Re-test 2026-10-11 (main f5b13f5)
+- Local: logic 56 OK, parser selftest OK, local_sim all PASS (C/D/E skipped, no specs), lint+dry-run OK for A and A+B. Builds (dry-run): A ok 51 s (72 scenarios), A+B ok 123 s (93), I ok, J ok, K DEGRADED.
+- K degraded: tool contract check says workflow calls verify_date_of_birth / get_account / close_call / create_promise, which tools-k.openapi.json does not list (v2 API uses /identity/check, /accounts/overdue, /promises/create, /notes/add, /callbacks/book, /handoff, /call/finish). Parser/compiler does not map the renamed v2 tool names. Not fixed here (builder/ owner).
+- Freya: updated existing A+B workflow d2fd658b in place (v2). A+B x1 full (13 calls): 11/13. Fails PUB-05 and PUB-08 only, both "extra note" vs the A-only expectation (Brief B rule 8), same as the earlier x3 (known, not bugs). No new regressions. Sim fb5058c9, 156 s. x3 not run.
