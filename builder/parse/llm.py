@@ -63,7 +63,13 @@ def _call_cli(model, system, prompt, timeout):
         p = subprocess.run(cmd, input=stdin, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            timeout=timeout, cwd=cwd, env=env)
     if p.returncode != 0:
-        raise RuntimeError(f"claude CLI failed ({p.returncode}): {(p.stderr or p.stdout)[:500]}")
+        detail = p.stderr or p.stdout
+        try:
+            failure = json.loads(p.stdout)
+            detail = failure.get('result') or failure.get('error') or detail
+        except (ValueError, AttributeError):
+            pass
+        raise RuntimeError(f"claude CLI failed ({p.returncode}): {str(detail)[:1000]}")
     try:
         out = json.loads(p.stdout)
     except json.JSONDecodeError:

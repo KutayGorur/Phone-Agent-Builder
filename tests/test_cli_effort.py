@@ -20,6 +20,12 @@ class CliEffortTests(unittest.TestCase):
                 llm._call_cli('model','system','prompt',10)
         run.assert_not_called()
 
+    def test_cli_failure_reports_reason_instead_of_usage_metadata(self):
+        response = subprocess.CompletedProcess([],1,'{"usage":{"input_tokens":0},"result":"Usage limit reached"}','')
+        with patch.object(llm.shutil,'which',return_value='claude'), patch.object(llm.subprocess,'run',return_value=response):
+            with self.assertRaisesRegex(RuntimeError,'Usage limit reached'):
+                llm._call_cli('model','system','prompt',10)
+
 
 if __name__ == '__main__':
     unittest.main()
