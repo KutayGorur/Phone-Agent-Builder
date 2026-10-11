@@ -96,3 +96,20 @@ Brief units:
 Current spec:
 {spec}
 """
+
+ARBITER_TASK = """Two independent readings of the same brief disagree on the facts below. Decide each one from the brief units only.
+For every item choose option_1 or option_2 (the options are in no particular order), name the ONE brief unit that settles it, and copy
+the exact words from that unit that support your choice. If the units do not settle an item, or neither option matches the brief, leave it out.
+Amendments, memos and exceptions override the text they refer to; a later file overrides an earlier one only when nothing says otherwise.
+
+Output one JSON object: {{"decisions": [{{"id": "<item id>", "choice": "option_1" or "option_2", "unit": "<unit id>", "quote": "<exact words from that unit>"}}]}}
+
+Items:
+{items}
+
+Tool API summary:
+{tools}
+
+Brief units:
+{units}
+"""

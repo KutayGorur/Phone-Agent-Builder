@@ -191,6 +191,37 @@ def enum_guard(spec, briefs, tool_api, out_dir, stem, left, t, parse_target, spe
     return new if len(rest) <= len(probs) else spec
 
 
+def cross_check_parse(spec, briefs, tool_api, left, t, parse_target, spec_file):
+    """Parse twice (builder/parse/consistency.py): a second extraction in a child process, the critical facts (calendar, bands,
+    floors, identity, outcomes, queues, callback, multi-product) compared, disagreements settled by the safer value, one
+    model re-ask that must quote the brief, or the first parse. Disagreements go to the trace and spec.parser.consistency.
+    Skipped when the parser is swapped, the spec is degraded, or less than 12 minutes are left. Any failure keeps the first spec."""
+    if not isinstance(spec, dict) or (spec.get("parser") or {}).get("degraded") or a_parse_is_fake(parse_target, spec_file):
+        return spec
+    if left() < 12 * 60:
+        t.note(f"parse cross-check skipped: only {left():.0f}s left in budget"); return spec
+    fd, tmp = tempfile.mkstemp(suffix=".json", prefix="spec-"); os.close(fd)
+    secs = min(420, max(left() * 0.25, 60))
+    try:
+        pathlib.Path(tmp).write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+        new = run_parse_subprocess("builder.parse.spec_parser:cross_check", [tmp, list(briefs), tool_api, secs - 20], secs, t.path)
+    except Exception as e:  # noqa: BLE001
+        t.error(f"parse cross-check failed: {e!r}; keeping the first parse"); return spec
+    finally:
+        try: os.unlink(tmp)
+        except OSError: pass
+    block = (new.get("parser") or {}).get("consistency") or {}
+    if not block.get("checked"):
+        t.note("parse cross-check did not run: " + str(block.get("skipped", "no result"))); return spec
+    dis = block.get("disagreements") or []
+    if not dis:
+        t.note(f"parse cross-check: the second parse agrees on all {block.get('facts')} critical facts")
+    for d in dis:
+        t.error(f"parse cross-check: {d['id']} differs: first={json.dumps(d['a'], ensure_ascii=False)[:160]} second={json.dumps(d['b'], ensure_ascii=False)[:160]} "
+                f"-> {d.get('rule')}: {json.dumps(d.get('chosen'), ensure_ascii=False)[:160]}" + ("" if d.get("applied") else f" (not applied: {d.get('problem', 'n/a')})"))
+    return new
+
+
 def a_parse_is_fake(parse_target, spec_file):
     """Tests and development runs swap the parser; the guard's child process needs the real one (and a model for the rest)."""
     return bool(spec_file) or parse_target != "builder.parse:parse"
@@ -340,6 +371,7 @@ def main(argv=None):
             else:
                 spec = stub_parse(briefs, tool_api)
         out_dir = pathlib.Path(a.out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+        spec = cross_check_parse(spec, briefs, tool_api, left, t, a.parse_target, a.spec_file)
         spec = enum_guard(spec, briefs, tool_api, out_dir, stem, left, t, a.parse_target, a.spec_file)
         (out_dir / f"{stem}.spec.json").write_text(json.dumps(spec, indent=1, ensure_ascii=False), encoding="utf-8")
         t.note(f"spec written to {out_dir / (stem + '.spec.json')}")

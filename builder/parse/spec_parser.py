@@ -16,7 +16,7 @@ import pathlib
 import re
 import time
 
-from . import enum_repair, llm, prompts, units as units_mod, validate as validate_mod
+from . import consistency, enum_repair, llm, prompts, units as units_mod, validate as validate_mod
 from .tools_api import tools_from_openapi
 
 try:
@@ -163,6 +163,25 @@ def _degraded(units, sources, tools_block, reason):
     return spec
 
 
+def _extract_groups(system, tools_text, units_text, left, per_call_cap=420):
+    """The three extraction calls (one per section group) in parallel -> ({group: result}, last error text)."""
+    def extract(group):
+        names, guide = prompts.SECTION_HELP[group]
+        prompt = prompts.EXTRACT_TASK.format(sections=names, guide=guide, section_list=names, tools=tools_text, units=units_text)
+        return _call_json(f"parse brief: spec sections {names}", system, prompt, EXTRACT_MODEL, timeout=min(per_call_cap, max(left() - 30, 60)))
+
+    results, last_err = {}, ''
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+        futs = {ex.submit(extract, g): g for g in prompts.SECTION_HELP}
+        for f in concurrent.futures.as_completed(futs):
+            try:
+                results[futs[f]] = f.result()
+            except Exception as e:  # noqa: BLE001
+                _note(f"extraction group {futs[f]} failed: {str(e)[:200]}")
+                last_err = str(e)[:300]
+    return results, last_err
+
+
 def parse(brief_paths, tool_api_path):
     t0 = time.time()
     left = lambda: PARSE_BUDGET_S - (time.time() - t0)  # noqa: E731
@@ -179,20 +198,7 @@ def parse(brief_paths, tool_api_path):
         tools_text = _tools_summary(tools)
 
         # ---- 1. extraction: three calls in parallel, one per group of sections
-        def extract(group):
-            names, guide = prompts.SECTION_HELP[group]
-            prompt = prompts.EXTRACT_TASK.format(sections=names, guide=guide, section_list=names, tools=tools_text, units=units_text)
-            return _call_json(f"parse brief: spec sections {names}", system, prompt, EXTRACT_MODEL, timeout=min(420, max(left() - 30, 60)))
-
-        results, last_err = {}, ''
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-            futs = {ex.submit(extract, g): g for g in prompts.SECTION_HELP}
-            for f in concurrent.futures.as_completed(futs):
-                try:
-                    results[futs[f]] = f.result()
-                except Exception as e:  # noqa: BLE001
-                    _note(f"extraction group {futs[f]} failed: {str(e)[:200]}")
-                    last_err = str(e)[:300]
+        results, last_err = _extract_groups(system, tools_text, units_text, left)
         models_used.add(EXTRACT_MODEL)
         if len(results) < len(prompts.SECTION_HELP):
             missing = sorted(set(prompts.SECTION_HELP) - set(results))
@@ -262,6 +268,56 @@ def parse(brief_paths, tool_api_path):
                       "seconds": round(time.time() - t0), "unresolved_errors": errors, "warnings": warnings, "open_questions": questions}
     order = [k for k in spec if k not in ("tools_server", "tools", "extra_rules", "rule_coverage", "parser")] + ["tools_server", "tools", "extra_rules", "rule_coverage", "parser"]
     return {k: spec[k] for k in order}
+
+
+def cross_check(spec_path, brief_paths, tool_api_path, seconds=360):
+    """Parse twice: extract the critical facts a second time (the three extraction calls, no audit, no repair), compare them
+    with the spec in spec_path (builder/parse/consistency.py) and settle each disagreement: safer value, else one targeted
+    model re-ask that must quote the brief, else the first spec's value. Returns the spec with a `parser.consistency` block.
+    build.py runs this in a child process; a model failure returns the first spec unchanged."""
+    t0 = time.time()
+    left = lambda: seconds - (time.time() - t0)  # noqa: E731
+    spec = json.loads(pathlib.Path(spec_path).read_text(encoding="utf-8-sig"))
+    all_units, _ = units_mod.load_briefs(brief_paths)
+    tools_block = tools_from_openapi(tool_api_path)
+    tools = tools_block["tools"]
+    block = {"checked": False}
+    par = dict(spec.get("parser") or {})
+    par["consistency"] = block
+    spec["parser"] = par
+    try:
+        system, units_text, tools_text = _system_prompt(), units_mod.render_units(all_units), _tools_summary(tools)
+        results, err = _extract_groups(system, tools_text, units_text, left, per_call_cap=300)
+        if len(results) < len(prompts.SECTION_HELP):
+            block["skipped"] = f"second extraction incomplete ({len(results)} of {len(prompts.SECTION_HELP)} groups): {err[:150]}"
+            _note("cross-check skipped: " + block["skipped"])
+            return spec
+        sections, extra, cov, questions = _merge_extract(list(results.values()), [u["id"] for u in all_units])
+        second = normalize_intents(_assemble(sections, extra, cov, questions))
+        second["tools_server"], second["tools"] = tools_block["server"], tools
+        first = {k: v for k, v in spec.items() if k != "parser"}
+        diffs = consistency.disagreements(first, second)
+        block.update({"checked": True, "facts": len(consistency.FACTS), "disagreements": []})
+        unit_text = {u["id"]: u["text"] for u in all_units}
+
+        def decide(todo):
+            items = consistency.decision_prompt_items(todo)
+            shown = [{k: v for k, v in it.items() if not k.startswith("_")} for it in items]
+            raw = _call_json("settle disagreements between two readings of the brief", system,
+                             prompts.ARBITER_TASK.format(items=json.dumps(shown, ensure_ascii=False, indent=1), tools=tools_text, units=units_text),
+                             EXTRACT_MODEL, timeout=min(240, max(left() - 20, 45)), retries=1)
+            return consistency.read_decisions(raw, todo, unit_text)
+
+        merged, log = consistency.resolve(first, second, diffs, decide if left() > 60 else None)
+        block["disagreements"] = log
+        block["seconds"] = round(time.time() - t0)
+        _note(f"cross-check: {len(diffs)} disagreement(s) in {len(consistency.FACTS)} critical facts")
+        merged["parser"] = par
+        return merged
+    except Exception as e:  # noqa: BLE001
+        block["skipped"] = f"cross-check failed: {str(e)[:200]}"
+        _note(block["skipped"])
+        return spec
 
 
 def guard_enums(spec_path, brief_paths, tool_api_path, allow_model=True):
