@@ -136,6 +136,29 @@ class ScamAndGraph(unittest.TestCase):
         self.assertIn('200.00 on Thursday 15 October', p.text)
         self.assertIn('back of your card', p.text)
 
+    def test_guard_routes_cooperative_turn_back_to_original_stage(self):
+        # Freya skips a transition without a condition; the live failed call
+        # remained in security_opening even after x_security became clear.
+        w = generate(spec('a'))
+        def route(node, state):
+            for transition in node['transitions']:
+                condition = transition.get('condition') or {}
+                if condition.get('operator') == 'always' or (
+                    condition.get('operator') == 'equals' and
+                    state.get(condition.get('variable')) == condition.get('operand')
+                ):
+                    return transition['target_node']
+            return None
+        for name, guard in w['nodes'].items():
+            if not name.startswith('security_'):
+                continue
+            with self.subTest(node=name):
+                self.assertEqual(route(guard, {'x_security': 'blocked'}), name)
+                self.assertEqual(route(guard, {'x_security': 'clear'}), name[len('security_'):])
+                self.assertFalse(guard.get('tools'))
+        # Recovery returns to the real security question, not invented identity.
+        self.assertIn('last four digits of the phone number', w['nodes']['idq_2']['task_message'])
+
 
 if __name__ == '__main__':
     unittest.main()

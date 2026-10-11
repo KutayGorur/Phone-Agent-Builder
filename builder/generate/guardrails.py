@@ -40,7 +40,8 @@ def guard_conversations(nodes):
                              'task_message': TRUST_RULE + '\nSpeak only the fixed safety response. Do not call tools.',
                              'on_enter': {'type': 'tts', 'text': GUARD_REPLY}, 'max_node_turns': 60,
                              'extraction_schema': [copy.deepcopy(field)],
-                             'transitions': [copy.deepcopy(blocked), {'target_node': name}]}
+                             'transitions': [copy.deepcopy(blocked), {'target_node': name,
+                                             'description': 'always', 'condition': {'operator': 'always'}}]}
 
 
 def scam_answer(text):
