@@ -1,5 +1,5 @@
 # Sim slot lock
 
-Reserved by Codex for Kutay's next A v9 chat retry, 2026-10-11. Targeted simulations only if chat gate passes.
+(currently free)
 
-Latest retry 2026-10-11: A v9 verified, validated, published, and publication confirmed by version list. A+B remains last confirmed v3. First A v9 chat message returned HTTP 504, no response or call ID. No simulation started; no process remains running. Pass chat gate before targeted/full tests; update A+B numeric candidate when runtime recovers.
+Latest retry 2026-10-11: published A v9 first chat message again returned HTTP 504, no response or call ID. A+B remains last confirmed v3. No simulation started; no process remains running. Kutay explicitly requested all platform cases: full A and combined A+B are pending chat gate and targeted tests, with A+B updated/verified first.
