@@ -258,6 +258,11 @@ def local_scenarios(spec, tool_api, out_dir, stem, t, seconds):
         t.note(f"generated local scenarios skipped: tool API unreadable ({e!r})"); return
     if not isinstance(api, dict) or not api.get("paths"):
         t.note("generated local scenarios skipped: tool API has no paths"); return
+    canon = ("verify_identity", "get_account", "create_promise", "add_note", "schedule_callback", "transfer_to_agent", "close_call")
+    missing = [c for c in canon if "/" + c not in api["paths"]]
+    if missing:
+        t.note("generated local scenarios skipped: the stand-in bank speaks the seven standard tool routes and this tool API has no route "
+               + ", ".join("/" + m for m in missing[:4]) + " (the README says the seven tool names stay the same)"); return
     try:
         res = _run_limited(lambda s, a: run(s, a, deadline=time.time() + seconds - 2, echo=False), (spec, api), seconds, "generated local scenarios")
     except Exception as e:  # noqa: BLE001

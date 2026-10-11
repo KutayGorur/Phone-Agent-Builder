@@ -222,3 +222,26 @@ Fail-safes (no outcome code is ever invented):
   transfer did not work.
 - `close_call` is retried once by the platform on a failed request; the call hangs up afterwards either way (a second close would break "exactly one close").
 
+
+## Additions (overnight hardening, 2026-10-11)
+
+Accepted spellings are normalised by the compiler (`builder/generate/ecfg.py`, `sanitize.py`); the parser should still emit these shapes.
+
+- `multi_product.create_promise_failure`: an object `{"after_failed_tries": N, "keep_recorded_promises": true, "note": {"reason": "<note reason>"}}`.
+  A bare sentence naming an allowed reason is read as that reason (`generate/sanitize.py`); any other section of the wrong type is coerced
+  when the words name allowed tool-API values, else dropped with a warning (a drop labels the build degraded).
+- Per-product amount and days fields: `amounts.past_due_field_by_product` / `debt_statement.amount_field_by_product` and `days_late_field_by_product`
+  (`{type: field}`). Without a map the compiler uses the field the tool API describes for that type alone. A type with no amount field is blocking.
+- Floors: `floor_formula_by_product.<type>` may carry `"greater_of_field": "<field>"` (floor = the greater of that field and the percentage) and
+  `"round_up_to": N` (or `"rounding": {"mode": "up|down|nearest", "to": N}`); `amounts.floor_rounding` ("round up to a whole krone") is the default for formulas.
+  Unreadable rounding text is blocking.
+- Band deadline: `{"business_days_after_today": N}` or `{"calendar_days_after_today": N, "if_non_business_day": "back" | "forward"}` (default back).
+  A band without a readable deadline is blocking and a parser validation error.
+- `third_party.callback.allowed_days`: `today`, `next_business_day`, `today_or_next_business_day`, `today_or_next_N_business_days` (also "working" and number words).
+- `closing.every_outcome_carries_reason: true` and outcomes whose table row lists exactly one reason: that reason is sent on every close of that outcome.
+- Spoken amounts: `amounts.currency` (ISO code) and `amounts.spoken_format` / `meta.amount_speech_format` (an example such as "1 250 kroner and 50 ore"),
+  `amounts.whole_*_only` or "no decimals / never say sen" for whole-unit currencies. No currency in the spec keeps two decimals.
+- Identity answers: the compiler reads each question's `format` and `ask` plus the tool API's description of the answer ("home_town: lower case ASCII")
+  and picks date / digits / letters-and-digits / free text (`generate/identity.py`): spoken digits and years, parts, accents removed, case and spacing as stated.
+- `parser.consistency` (added by `build.py`): the second extraction's disagreements on calendar, bands, floors, identity, outcomes, queues, callback,
+  persuasion and multi-product, each with the rule that settled it (`builder/parse/consistency.py`).
