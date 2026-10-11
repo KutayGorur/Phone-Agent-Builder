@@ -1,5 +1,3 @@
 # Sim slot lock
 
-(currently free)
-
-Guard candidate: A v8 and A+B v3 published. Both passed dry run; chat smoke and unchanged D control returned HTTP 504. No new simulations started.
+codex-flight | polished candidate comprehensive tests | started 2026-10-11T11:22:26Z | expected 15 min
