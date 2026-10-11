@@ -131,7 +131,9 @@ def main():
     repo = re.sub(r"://[^@/]*@", "://", repo)
     paths = lambda p: ", ".join(str(x.relative_to(ROOT)) for x in p)
     print("\n--- form fields ---")
-    print(f"team: {a.team}\nrepo: {repo}\ncommit: {commit}\nrun_command: {RUN_CMD.replace('traces/{stem}.log', 'traces/<stem>.log')}")
+    reported_commit = manifest['commit'] if manifest else commit
+    reported_command = manifest['run_command'] if manifest else RUN_CMD.replace('traces/{stem}.log', 'traces/<stem>.log')
+    print(f"team: {a.team}\nrepo: {repo}\ncommit: {reported_commit}\nrun_command: {reported_command}")
     print("workflows: " + paths([p[3] for p in plan])); print("traces: " + paths([p[4] for p in plan]))
     if git("status", "--porcelain", "--", a.dest) and not a.apply: print("(submission/ has uncommitted changes)")
     print("unpushed commits:", git("rev-list", "--count", "@{u}..HEAD", check=False) or "unknown (no upstream)")

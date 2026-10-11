@@ -248,3 +248,5 @@ The public folder gained a follow-up transcript at the first-hour recheck; downl
 
 Current build at ccf2370 started 18:09 UTC, indexed 18 readable documents including the final follow-up meeting. Extracted 68 sourced requirements and seven mock business endpoints. Complete local rerun passed: 29 logic test files, parser selftest, local_sim and root test discovery. Six example personas regenerated with source-derived API dispatch counts/field assertions; these are test artifacts only, not agent edits. Freya sim slot is still free; no final paid calls or published final workflow yet.
 
+18:27 UTC Drive recheck downloaded and SHA-256 compared all 19 published files into an ignored comparison directory. No added or changed files; the follow-up meeting and customer fixtures are unchanged. The final compiler's Opus call timed out at 18:22 UTC and its automatic Sonnet fallback is running; no final workflow has been published, and no final simulations have been charged. Corrected packaging's printed commit/run command to match the source manifest rather than newer packaging HEAD or the practice command. Build code and current generated artifacts were not changed.
+
