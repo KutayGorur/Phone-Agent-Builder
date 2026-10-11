@@ -33,3 +33,5 @@ Merge order for generator work: 06 -> 07 -> (01/02/03/04 fixes, small PRs). Anyo
 
 
 | 20 unchanged public recovery retry | team/comms/log-codex-flight.md | yes (PUB-01 gate, remaining A, full combined) | no | 19 | codex-flight | done (execution recovered; A 10/10; combined raw 11/13, 13/13 conversation; current 3-rep confidence pending) | 2026-10-11 | main | no stalls; sim slot free; unchanged A v11 / combined v6 |
+
+| 21 combined-policy fixture and 3-rep readiness | team/comms/log-codex-flight.md | yes (2 targeted + 39 robustness calls) | no | 20 | codex-flight | done (separate B-aware expectations; strict 11/13 at 3/3; two runtime failures remain) | 2026-10-11 | main | PUB-05/08 3/3; PUB-01 sandbox parse / PUB-02 late callback; no agent changes; slot free |
