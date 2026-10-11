@@ -1,5 +1,3 @@
 # Sim slot lock
 
-One line when held, none when free. Format: `<agent> | task NN | started <UTC> | expected <N> min`
-
-(currently free)
+codex-flight | PUB-05 fixed speech regression | started 2026-10-11T10:15:13Z | expected 10 min
