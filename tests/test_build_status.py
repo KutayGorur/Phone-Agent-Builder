@@ -19,17 +19,19 @@ def flaky(briefs, api):
     if m.exists(): return json.loads(%r)
     m.write_text("1"); s = json.loads(%r); s["parser"] = {"degraded": True, "reason": "first try"}; s["identity"] = None; return s
 def sound(briefs, api): return json.load(open(%r, encoding="utf-8"))
-''' % (json.dumps(GOOD), json.dumps(GOOD), str(ROOT / "builder" / "specs" / "brief-a.spec.json"), json.dumps(GOOD), json.dumps(GOOD), str(ROOT / "builder" / "specs" / "brief-a.spec.json"))
+def reader(briefs, api): open(briefs[0]).read(); open(api).read(); return json.loads(%r)
+''' % (json.dumps(GOOD), json.dumps(GOOD), str(ROOT / "builder" / "specs" / "brief-a.spec.json"), json.dumps(GOOD), json.dumps(GOOD), str(ROOT / "builder" / "specs" / "brief-a.spec.json"), json.dumps(GOOD))
 
 
-def run(tmp, target, budget_min=27, extra=()):
+def run(tmp, target, budget_min=27, extra=(), relative=False):
     (tmp / "fakeparse.py").write_text(FAKE, encoding="utf-8")
     (tmp / "b.md").write_text("brief", encoding="utf-8"); (tmp / "t.json").write_text("{}", encoding="utf-8")
     env = dict(os.environ, PYTHONPATH=str(tmp), PYTHONIOENCODING="utf-8")
     t0 = time.time()
-    p = subprocess.run([sys.executable, str(BUILD), str(tmp / "b.md"), str(tmp / "t.json"), "--dry-run", "--parse-target", target,
+    files = ["b.md", "t.json"] if relative else [str(tmp / "b.md"), str(tmp / "t.json")]
+    p = subprocess.run([sys.executable, str(BUILD), *files, "--dry-run", "--parse-target", target,
                         "--out-dir", str(tmp / "out"), "--trace-dir", str(tmp / "tr"), "--budget-min", str(budget_min), *extra],
-                       env=env, capture_output=True, text=True, encoding="utf-8", timeout=120)
+                       env=env, cwd=str(tmp) if relative else None, capture_output=True, text=True, encoding="utf-8", timeout=120)
     trace = "".join(f.read_text(encoding="utf-8") for f in (tmp / "tr").glob("*.trace.txt"))
     return p.returncode, trace, time.time() - t0
 
@@ -53,6 +55,8 @@ def main():
         rc, tr, _ = run(pathlib.Path(d), "fakeparse:sound"); assert rc == 0 and end_status(tr) == "ok" and "compiler guessed" not in tr, (rc, tr)
     with tempfile.TemporaryDirectory() as d:   # first parse not ready, second is: the second one is used, status ok
         rc, tr, _ = run(pathlib.Path(d), "fakeparse:flaky"); assert rc == 0 and end_status(tr) == "ok" and "second parse is ready" in tr, (rc, tr)
+    with tempfile.TemporaryDirectory() as d:   # started from another directory with relative paths: the parse child still finds the files
+        rc, tr, _ = run(pathlib.Path(d), "fakeparse:reader", relative=True); assert rc == 0 and end_status(tr) == "ok", (rc, tr)
     print("ok")
 
 

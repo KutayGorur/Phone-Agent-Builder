@@ -114,6 +114,8 @@ python3 builder/build.py <brief> <tool_api> 2>&1 | tee traces/<brief>.log
 python3 builder/build.py <brief_a> <brief_b> <tool_api>        # a brief that builds on another: list both, the tool API file goes last
 ```
 
+- Needs Python 3.10 or newer and nothing from pip. The parser calls a Claude model: set `ANTHROPIC_API_KEY`, or be logged in to the `claude` CLI on the machine that runs the build. Without either the build still exports an agent, but the trace says `status=degraded`.
+- The command works from any directory; `out/`, `traces/` and `.freya-agents.json` are always written inside the repository.
 - The last file is the tool API file; every file before it is a brief. The last brief names the Freya slot and the output.
 - Pipeline: parse (`builder/parse`) -> spec.json -> generate (`builder/generate`) -> `freya.save_workflow` -> optional self-test and fix -> `freya.export_workflow`. The contract between the stages is `builder/SPEC_CONTRACT.md`.
 - Output: `out/<brief>.workflow.json` (submit this), `out/<brief>.spec.json` (the parsed spec), and the trace `traces/<brief>-<time>.trace.txt`.

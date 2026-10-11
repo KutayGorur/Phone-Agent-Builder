@@ -344,6 +344,8 @@ def main(argv=None):
     if len(a.files) < 2:
         ap.error("need at least one brief and the tool API file")
     briefs, tool_api = a.files[:-1], a.files[-1]
+    shown = (",".join(briefs), tool_api)
+    briefs, tool_api = [str(pathlib.Path(b).resolve()) for b in briefs], str(pathlib.Path(tool_api).resolve())   # the parse child runs in ROOT
     if a.selftest and not a.selftest_brief and len(briefs) == 1:
         m = re.fullmatch(r"brief[-_ ]?([a-z])", pathlib.Path(briefs[0]).stem, re.I)   # practice briefs: only their own customers make sense
         if m:
@@ -361,7 +363,7 @@ def main(argv=None):
         t.end("timeout", workflow_id=workflow_id, output=out_path)
         os._exit(3)
     wd = threading.Timer(max(hard - time.time(), 1), watchdog); wd.daemon = True; wd.start()
-    t.start(briefs=",".join(briefs), tool_api=tool_api, budget_s=int(left()), selftest=a.selftest)
+    t.start(briefs=shown[0], tool_api=shown[1], budget_s=int(left()), selftest=a.selftest)
     status, workflow_id, out_path = "failed", None, None
     try:
         t.stage("parse")
