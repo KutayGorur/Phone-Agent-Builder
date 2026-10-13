@@ -661,12 +661,16 @@ def cur_question(st):
 
 
 def bounded_question_answer(st):
-    """Account facts or a brief-defined answer, never a generated payment proposal."""
+    """Account facts or a brief-defined answer, never a generated payment proposal. None = the brief gives the scam
+    answer as an instruction ("invite them to call ..."), which cannot be spoken as it stands."""
     kind = st.get('question_kind')
     if kind == 'ai':
         text = E['ai_say']
     elif kind == 'scam':
-        text = E['scam_say']
+        text = str(E['scam_say'] or '').strip()
+        if not text.lower().startswith(('you can ', 'you may ')):
+            return None
+        text = text[0].upper() + text[1:]
     elif kind == 'balance' and st.get('prods'):
         text = '; '.join('%s: %s %s, %d days %s' %
                          (p['label'], say_money(p['pd']), E['pd_word'], p['dl'], E['days_word']) for p in st['prods'])
@@ -679,6 +683,17 @@ def bounded_question_answer(st):
     return text + ('' if text.endswith(('.', '?', '!')) else '.')
 
 
+def bounded_reply(st, then=''):
+    """Speak the bounded answer, then the fixed line `then` if there is one. Only an instruction-style scam answer is
+    worded by the model, and it gets no account facts to build a proposal from."""
+    ans = bounded_question_answer(st)
+    if ans is None:
+        return ask('The customer asked whether this call is genuine. Reply in one short sentence: ' + str(E['scam_say']).strip().rstrip('.') +
+                   '. Add no amount, no date and no offer of your own.' +
+                   (' Then say exactly this, word for word: ' + then if then else ' Ask nothing.'))
+    speak((ans + ' ' + then).strip())
+
+
 def reask(st, lead='', kind='question', then=True):
     """The customer said something that needs no policy change: answer it and ask the pending question again."""
     q = cur_question(st)
@@ -686,7 +701,7 @@ def reask(st, lead='', kind='question', then=True):
         # A negative instruction did not prevent a real PUB-05 repayment offer.
         # Keep hardship answers and any permitted pending readback in fixed TTS.
         st['question_answered'] = True
-        return speak(bounded_question_answer(st) + (' ' + q if then else ''))
+        return bounded_reply(st, q if then else '')
     offered = False
     if not st.get('hard_pending') and st['phase'] != 'confirm' and not st['all']:
         pe = st['prods'][st['cur']].get('pend')
@@ -1171,11 +1186,11 @@ def turn(st):
     turn_inner(st)
     if q == 'yes' and vars.get('route') in ('fin', 'note') and not st.get('transfer'):
         st['defer'] = vars['route']                # answer first; the close follows on the next turn
-        speak(bounded_question_answer(st))         # fixed TTS; preserve the pending close and transfer interruption
+        bounded_reply(st)                          # fixed TTS; preserve the pending close and transfer interruption
         return
     if q == 'yes' and vars.get('route') == 'say' and vars.get('say_text') and not st.get('question_answered'):
         core = vars['say_text']
-        speak(bounded_question_answer(st) + ' ' + core)
+        bounded_reply(st, core)
 
 
 def turn_inner(st):
